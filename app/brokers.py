@@ -9,11 +9,16 @@ class BrokerAdapter(ABC):
 
 class PaperBroker(BrokerAdapter):
     """Simulated broker only. Does not connect to an exchange or broker."""
-    def __init__(self):
+    def __init__(self, store=None):
+        self.store = store
         self.orders: dict[str, OrderResult] = {}
         self.idempotency: dict[str, str] = {}
 
     def submit(self, order: OrderRequest) -> OrderResult:
+        if self.store is not None:
+            saved = self.store.get_order(order.idempotency_key)
+            if saved is not None:
+                return OrderResult.model_validate(saved)
         prior_id = self.idempotency.get(order.idempotency_key)
         if prior_id:
             return self.orders[prior_id]
@@ -29,4 +34,6 @@ class PaperBroker(BrokerAdapter):
         )
         self.orders[result.order_id] = result
         self.idempotency[order.idempotency_key] = result.order_id
+        if self.store is not None:
+            self.store.save_order(result, order)
         return result
