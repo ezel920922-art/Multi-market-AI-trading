@@ -36,11 +36,15 @@ def test_daily_loss_halts_new_signals():
     with pytest.raises(RiskRejected, match="halted|limit"):
         risk.approve(signal(), 10, "unique-key-005")
 
-def test_idempotency_key_cannot_be_reused_for_new_risk():
+def test_idempotency_retry_returns_original_order_without_new_risk():
     engine = TradingEngine()
-    engine.submit_signal(signal(), 1, 10, "unique-key-006")
-    with pytest.raises(RiskRejected, match="Duplicate"):
-        engine.submit_signal(signal(), 1, 10, "unique-key-006")
+    first = engine.submit_signal(signal(), 1, 10, "unique-key-006")
+    open_risk_after_first = engine.risk.status["open_risk"]
+
+    retry = engine.submit_signal(signal(), 1, 10, "unique-key-006")
+
+    assert retry.order_id == first.order_id
+    assert engine.risk.status["open_risk"] == open_risk_after_first
 
 def test_rejects_sell_stop_on_wrong_side():
     with pytest.raises(RiskRejected, match="above entry"):
