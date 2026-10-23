@@ -38,3 +38,21 @@ def test_paper_order_endpoint():
     assert body["paper"] is True
     assert body["status"] == "paper_filled"
     assert body["order_id"].startswith("PAPER-")
+
+def test_paper_order_rejects_infinite_quantity():
+    response = client.post("/paper/orders", json={
+        "signal": {
+            "strategy_id": "api-test",
+            "market": "equities",
+            "symbol": "TEST",
+            "side": "buy",
+            "entry": 100,
+            "stop_loss": 99,
+            "take_profit": 102,
+            "confidence": 0.9
+        },
+        "quantity": float("inf"),
+        "risk_amount": 25,
+        "idempotency_key": "api-test-key-002"
+    })
+    assert response.status_code == 422
