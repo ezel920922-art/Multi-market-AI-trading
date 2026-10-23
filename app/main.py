@@ -10,8 +10,8 @@ engine = TradingEngine()
 
 class SubmitSignalRequest(BaseModel):
     signal: Signal
-    quantity: float = Field(gt=0)
-    risk_amount: float = Field(gt=0)
+    quantity: float = Field(gt=0, allow_inf_nan=False)
+    risk_amount: float = Field(gt=0, allow_inf_nan=False)
     idempotency_key: str = Field(min_length=8, max_length=120)
 
 @app.get("/health")

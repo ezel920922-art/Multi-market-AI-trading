@@ -21,10 +21,10 @@ class Signal(BaseModel):
     market: MarketType
     symbol: str = Field(min_length=1, max_length=40)
     side: Side
-    entry: float = Field(gt=0)
-    stop_loss: float = Field(gt=0)
-    take_profit: float | None = Field(default=None, gt=0)
-    confidence: float = Field(ge=0, le=1)
+    entry: float = Field(gt=0, allow_inf_nan=False)
+    stop_loss: float = Field(gt=0, allow_inf_nan=False)
+    take_profit: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     rationale: str = Field(default="", max_length=500)
 
@@ -38,8 +38,8 @@ class Signal(BaseModel):
 
 class OrderRequest(BaseModel):
     signal: Signal
-    quantity: float = Field(gt=0)
-    risk_amount: float = Field(gt=0)
+    quantity: float = Field(gt=0, allow_inf_nan=False)
+    risk_amount: float = Field(gt=0, allow_inf_nan=False)
     idempotency_key: str = Field(min_length=8, max_length=120)
 
 class OrderResult(BaseModel):

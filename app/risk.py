@@ -14,6 +14,34 @@ class RiskConfig:
     min_stop_distance_pct: float = 0.0005
     max_stop_distance_pct: float = 0.10
 
+    def __post_init__(self) -> None:
+        values = {
+            "initial_equity": self.initial_equity,
+            "risk_per_trade_pct": self.risk_per_trade_pct,
+            "daily_loss_limit_pct": self.daily_loss_limit_pct,
+            "max_open_risk_pct": self.max_open_risk_pct,
+            "min_confidence": self.min_confidence,
+            "min_stop_distance_pct": self.min_stop_distance_pct,
+            "max_stop_distance_pct": self.max_stop_distance_pct,
+        }
+        for name, value in values.items():
+            try:
+                finite = isfinite(float(value))
+            except (TypeError, ValueError):
+                finite = False
+            if not finite:
+                raise ValueError(f"{name} must be finite")
+        if self.initial_equity <= 0:
+            raise ValueError("initial_equity must be positive")
+        for name in ("risk_per_trade_pct", "daily_loss_limit_pct", "max_open_risk_pct"):
+            value = getattr(self, name)
+            if not 0 < value <= 1:
+                raise ValueError(f"{name} must be in (0, 1]")
+        if not 0 <= self.min_confidence <= 1:
+            raise ValueError("min_confidence must be in [0, 1]")
+        if not 0 < self.min_stop_distance_pct <= self.max_stop_distance_pct <= 1:
+            raise ValueError("stop distance percentages must satisfy 0 < min <= max <= 1")
+
 class RiskRejected(ValueError):
     pass
 
@@ -21,8 +49,6 @@ class RiskManager:
     """Central fail-closed risk gate. State is in-memory in this prototype."""
     def __init__(self, config: RiskConfig | None = None):
         self.config = config or RiskConfig()
-        if not isfinite(self.config.initial_equity) or self.config.initial_equity <= 0:
-            raise ValueError("initial_equity must be a finite positive number")
         self._lock = RLock()
         self._day = datetime.now(timezone.utc).date()
         self._realized_pnl = 0.0
@@ -52,14 +78,18 @@ class RiskManager:
             raise ValueError("amount must be finite")
         with self._lock:
             self._roll_day()
-            self._open_risk = max(0.0, self._open_risk - max(0.0, amount))
+            self._open_risk = max(0.0, self._open_risk - max(0.0, float(amount)))
 
     def approve(self, signal: Signal, risk_amount: float, idempotency_key: str) -> None:
         with self._lock:
             self._roll_day()
             if self._halted:
                 raise RiskRejected("Trading halted: daily loss limit reached or safety halt active")
-            if not isfinite(float(risk_amount)) or risk_amount <= 0:
+            try:
+                risk_amount = float(risk_amount)
+            except (TypeError, ValueError):
+                raise RiskRejected("Risk amount must be finite and positive")
+            if not isfinite(risk_amount) or risk_amount <= 0:
                 raise RiskRejected("Risk amount must be finite and positive")
             if not idempotency_key or idempotency_key in self._seen_keys:
                 raise RiskRejected("Duplicate or empty idempotency key")
