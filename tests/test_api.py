@@ -2,6 +2,10 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 client = TestClient(app)
+TEST_API_KEY = "test-only-api-key-32-chars-minimum"
+
+def auth_headers():
+    return {"X-API-Key": TEST_API_KEY}
 
 def test_health_is_paper_only():
     response = client.get("/health")
@@ -9,15 +13,27 @@ def test_health_is_paper_only():
     assert response.json()["mode"] == "paper_only"
     assert response.json()["real_execution_enabled"] is False
 
-def test_risk_status_endpoint():
-    response = client.get("/risk/status")
+def test_risk_status_endpoint(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.get("/risk/status", headers=auth_headers())
     assert response.status_code == 200
     body = response.json()
     assert body["paper_only"] is True
     assert "daily_loss_limit" in body
 
-def test_paper_order_endpoint():
-    response = client.post("/paper/orders", json={
+def test_protected_endpoint_rejects_missing_api_key(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.get("/risk/status")
+    assert response.status_code == 401
+
+def test_protected_endpoint_fails_closed_when_api_key_is_unconfigured(monkeypatch):
+    monkeypatch.delenv("TRADING_API_KEY", raising=False)
+    response = client.get("/risk/status")
+    assert response.status_code == 503
+
+def test_paper_order_endpoint(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/paper/orders", headers=auth_headers(), json={
         "signal": {
             "strategy_id": "api-test",
             "market": "equities",
@@ -39,8 +55,9 @@ def test_paper_order_endpoint():
     assert body["status"] == "paper_filled"
     assert body["order_id"].startswith("PAPER-")
 
-def test_paper_order_rejects_infinite_quantity():
-    response = client.post("/paper/orders", json={
+def test_paper_order_rejects_infinite_quantity(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/paper/orders", headers=auth_headers(), json={
         "signal": {
             "strategy_id": "api-test",
             "market": "equities",
