@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from app.brokers import PaperBroker
 from app.engine import TradingEngine
 from app.models import MarketType, Side, Signal
 
@@ -65,11 +64,25 @@ def test_paper_order_is_persisted():
     assert store.get_order("persist-key-001")["order_id"] == result.order_id
 
 
-def test_persisted_idempotency_key_is_rejected_before_second_order():
+def test_retry_returns_same_persisted_order_without_double_counting_risk():
     store = FakeStore()
     engine = TradingEngine(store=store)
-    engine.submit_signal(sample_signal(), 1, 25, "persist-key-002")
-    from app.risk import RiskRejected
-    import pytest
-    with pytest.raises(RiskRejected, match="Duplicate"):
-        engine.submit_signal(sample_signal(), 1, 25, "persist-key-002")
+    first = engine.submit_signal(sample_signal(), 1, 25, "persist-key-002")
+    open_risk_after_first = engine.risk.status["open_risk"]
+
+    retry = engine.submit_signal(sample_signal(), 1, 25, "persist-key-002")
+
+    assert retry.order_id == first.order_id
+    assert retry.model_dump(mode="json") == first.model_dump(mode="json")
+    assert engine.risk.status["open_risk"] == open_risk_after_first
+
+
+def test_in_memory_retry_returns_same_order_without_double_counting_risk():
+    engine = TradingEngine()
+    first = engine.submit_signal(sample_signal(), 1, 25, "memory-key-001")
+    open_risk_after_first = engine.risk.status["open_risk"]
+
+    retry = engine.submit_signal(sample_signal(), 1, 25, "memory-key-001")
+
+    assert retry.order_id == first.order_id
+    assert engine.risk.status["open_risk"] == open_risk_after_first
