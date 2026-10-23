@@ -3,7 +3,9 @@ from app.models import Signal, MarketType, Side
 from app.risk import RiskManager, RiskConfig, RiskRejected
 from app.engine import TradingEngine
 
-def signal(side=Side.buy, confidence=0.9, entry=100.0, stop=99.0, take_profit=None):
+def signal(side=Side.buy, confidence=0.9, entry=100.0, stop=None, take_profit=None):
+    if stop is None:
+        stop = 99.0 if side == Side.buy else 101.0
     if take_profit is None:
         take_profit = 102.0 if side == Side.buy else 98.0
     return Signal(strategy_id="test-strategy", market=MarketType.equities, symbol="TEST",
