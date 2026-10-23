@@ -60,3 +60,22 @@ def test_daily_loss_status_exposes_risk_limits():
     assert status["risk_per_trade_limit"] == 50.0
     assert status["max_open_risk_limit"] == 200.0
     assert status["paper_only"] is True
+
+def test_rejects_non_finite_signal_prices():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        Signal(strategy_id="test", market=MarketType.equities, symbol="TEST",
+               side=Side.buy, entry=float("inf"), stop_loss=99, take_profit=102,
+               confidence=0.9)
+
+@pytest.mark.parametrize("kwargs", [
+    {"initial_equity": float("nan")},
+    {"risk_per_trade_pct": float("inf")},
+    {"daily_loss_limit_pct": 0},
+    {"max_open_risk_pct": 1.1},
+    {"min_confidence": 1.1},
+    {"min_stop_distance_pct": 0.2, "max_stop_distance_pct": 0.1},
+])
+def test_risk_config_rejects_unsafe_values(kwargs):
+    with pytest.raises(ValueError):
+        RiskConfig(**kwargs)
