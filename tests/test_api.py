@@ -51,7 +51,7 @@ def test_paper_order_rejects_infinite_quantity():
             "take_profit": 102,
             "confidence": 0.9
         },
-        "quantity": float("inf"),
+        "quantity": "Infinity",
         "risk_amount": 25,
         "idempotency_key": "api-test-key-002"
     })
