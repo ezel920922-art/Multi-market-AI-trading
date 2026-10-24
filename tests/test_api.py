@@ -73,3 +73,27 @@ def test_paper_order_rejects_infinite_quantity(monkeypatch):
         "idempotency_key": "api-test-key-002"
     })
     assert response.status_code == 422
+
+
+def test_dashboard_has_professional_sections():
+    response = client.get("/")
+    assert response.status_code == 200
+    for section in ("brokers", "news", "strategies", "toolkit"):
+        assert f'id="{section}"' in response.text
+    assert "Paper trading only" in response.text or "التداول الورقي فقط" in response.text
+
+
+def test_integration_status_does_not_expose_secrets(monkeypatch):
+    monkeypatch.setenv("NEWS_API_KEY", "test-secret-never-return-this")
+    response = client.get("/api/integrations")
+    assert response.status_code == 200
+    assert response.json()["newsapi"]["configured"] is True
+    assert "test-secret-never-return-this" not in response.text
+    assert response.json()["real_execution_enabled"] is False
+
+
+def test_news_endpoint_requires_server_side_key(monkeypatch):
+    monkeypatch.delenv("NEWS_API_KEY", raising=False)
+    response = client.get("/api/news")
+    assert response.status_code == 503
+    assert "not configured" in response.json()["detail"]
