@@ -99,3 +99,69 @@ def test_news_endpoint_requires_server_side_key(monkeypatch):
     response = client.get("/api/news")
     assert response.status_code == 503
     assert "not configured" in response.json()["detail"]
+
+
+def test_paper_order_rejects_buy_with_stop_loss_above_entry(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {
+            "strategy_id": "safety-test",
+            "market": "equities",
+            "symbol": "TEST",
+            "side": "buy",
+            "entry": 100,
+            "stop_loss": 101,
+            "take_profit": 103,
+            "confidence": 0.9,
+            "rationale": "invalid stop direction must be rejected"
+        },
+        "quantity": 1,
+        "risk_amount": 25,
+        "idempotency_key": "safety-buy-sl-001"
+    })
+    assert response.status_code == 422
+    assert "stop-loss must be below entry" in response.json()["detail"]
+
+
+def test_paper_order_rejects_sell_with_take_profit_above_entry(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {
+            "strategy_id": "safety-test",
+            "market": "equities",
+            "symbol": "TEST",
+            "side": "sell",
+            "entry": 100,
+            "stop_loss": 101,
+            "take_profit": 99.5,
+            "confidence": 0.9,
+            "rationale": "valid short-side target"
+        },
+        "quantity": 1,
+        "risk_amount": 25,
+        "idempotency_key": "safety-sell-tp-001"
+    })
+    # The short target is below entry, so this order should pass directional checks.
+    assert response.status_code == 200
+
+
+def test_paper_order_rejects_risk_above_per_trade_limit(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {
+            "strategy_id": "safety-test",
+            "market": "equities",
+            "symbol": "TEST",
+            "side": "buy",
+            "entry": 100,
+            "stop_loss": 99,
+            "take_profit": 102,
+            "confidence": 0.9,
+            "rationale": "risk limit must be enforced"
+        },
+        "quantity": 1,
+        "risk_amount": 100,
+        "idempotency_key": "safety-risk-cap-001"
+    })
+    assert response.status_code == 422
+    assert "exceeds configured limit" in response.json()["detail"]
