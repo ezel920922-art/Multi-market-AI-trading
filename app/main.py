@@ -114,10 +114,10 @@ def market_news():
     api_key = os.getenv("NEWS_API_KEY", "").strip()
     if not api_key:
         raise HTTPException(status_code=503, detail="NEWS_API_KEY is not configured; use the official source links in the dashboard")
-    query = urlencode({"country": "us", "category": "business", "pageSize": 10, "apiKey": api_key})
+    query = urlencode({"country": "us", "category": "business", "pageSize": 10})
     request = Request(
         "https://newsapi.org/v2/top-headlines?" + query,
-        headers={"Accept": "application/json", "User-Agent": "MultiMarketAI/0.3"},
+        headers={"Accept": "application/json", "User-Agent": "MultiMarketAI/0.3", "X-Api-Key": api_key},
     )
     try:
         with urlopen(request, timeout=8) as response:
