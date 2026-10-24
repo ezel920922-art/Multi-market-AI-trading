@@ -8,7 +8,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
-from app.models import Signal, OrderRequest
+from app.models import Signal, OrderRequest, MarketType, Side
 from app.engine import TradingEngine
 from app.risk import RiskRejected
 from app.storage import DuplicateOrderKey, PostgresStore
@@ -24,6 +24,16 @@ class SubmitSignalRequest(BaseModel):
     quantity: float = Field(gt=0, allow_inf_nan=False)
     risk_amount: float = Field(gt=0, allow_inf_nan=False)
     idempotency_key: str = Field(min_length=8, max_length=120)
+
+class SetupAnalysisRequest(BaseModel):
+    market: MarketType
+    symbol: str = Field(min_length=1, max_length=40)
+    side: Side
+    entry: float = Field(gt=0, allow_inf_nan=False)
+    stop_loss: float = Field(gt=0, allow_inf_nan=False)
+    take_profit: float = Field(gt=0, allow_inf_nan=False)
+    equity: float = Field(default=10_000, gt=0, allow_inf_nan=False)
+    risk_pct: float = Field(default=0.005, gt=0, le=0.005, allow_inf_nan=False)
 
 def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
     expected = os.getenv("TRADING_API_KEY", "")
@@ -94,6 +104,40 @@ def submit_paper_order(payload: SubmitSignalRequest):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.post("/api/analysis/setup", dependencies=[Depends(require_api_key)])
+def analyze_setup(payload: SetupAnalysisRequest):
+    """Calculate a risk-budgeted paper setup; this endpoint never places an order."""
+    entry = float(payload.entry)
+    stop = float(payload.stop_loss)
+    target = float(payload.take_profit)
+    if payload.side == Side.buy and not (stop < entry < target):
+        raise HTTPException(status_code=422, detail="For a buy setup, stop_loss < entry < take_profit is required")
+    if payload.side == Side.sell and not (target < entry < stop):
+        raise HTTPException(status_code=422, detail="For a sell setup, take_profit < entry < stop_loss is required")
+    stop_distance_pct = abs(entry - stop) / entry
+    config = engine.risk.config
+    if not config.min_stop_distance_pct <= stop_distance_pct <= config.max_stop_distance_pct:
+        raise HTTPException(status_code=422, detail="Stop-loss distance is outside the configured risk limits")
+    risk_per_unit = abs(entry - stop)
+    reward_per_unit = abs(target - entry)
+    risk_budget = float(payload.equity) * float(payload.risk_pct)
+    return {
+        "mode": "analysis_only",
+        "order_placed": False,
+        "market": payload.market.value,
+        "symbol": payload.symbol.strip().upper(),
+        "side": payload.side.value,
+        "entry": entry,
+        "stop_loss": stop,
+        "take_profit": target,
+        "stop_distance_pct": round(stop_distance_pct * 100, 4),
+        "risk_budget": round(risk_budget, 2),
+        "risk_per_unit": round(risk_per_unit, 8),
+        "reward_per_unit": round(reward_per_unit, 8),
+        "reward_risk_ratio": round(reward_per_unit / risk_per_unit, 4),
+        "suggested_quantity": round(risk_budget / risk_per_unit, 8),
+        "assumptions": ["Before fees, slippage, funding, and contract-size multipliers", "Not a trade recommendation"],
+    }
 @app.get("/api/integrations")
 def integration_status():
     return {
