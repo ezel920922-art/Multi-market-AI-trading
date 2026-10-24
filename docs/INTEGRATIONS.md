@@ -9,6 +9,25 @@ The service is intentionally paper-only. The dashboard currently provides offici
 - Optional NewsAPI business headlines endpoint: `GET /api/news`.
 - PostgreSQL persistence via Neon when `DATABASE_URL` is configured.
 
+## Broker legitimacy and licensing checks
+
+The dashboard includes official verification resources, not a claim that any provider is approved for every user:
+- EU investment-firm checks: https://www.esma.europa.eu/investor-corner/is-the-firm-regulated
+- US securities broker background: https://brokercheck.finra.org/
+- US derivatives registration guidance: https://www.cftc.gov/check
+- Latvia financial-market participant register: https://www.bank.lv/en/financial-market-participant-register
+
+Before depositing, match the exact legal entity and website domain against the regulator's register, verify that the licence covers the intended product and client jurisdiction, and review withdrawal, custody, margin, and investor-protection terms. A regulator listing is not a guarantee against trading losses or fraud by an impersonator.
+
+## Analysis and research tools
+
+- TradingView / Pine Script for chart analysis and alerts: https://www.tradingview.com/ and https://www.tradingview.com/pine-script-docs/
+- pandas and scikit-learn for reproducible data analysis and statistical experiments: https://pandas.pydata.org/docs/ and https://scikit-learn.org/stable/
+- Backtrader, vectorbt, and QuantConnect LEAN for backtesting and research: https://www.backtrader.com/, https://vectorbt.dev/, https://www.quantconnect.com/docs/v2
+- FRED and SEC EDGAR for economic data and public filings: https://fred.stlouisfed.org/ and https://www.sec.gov/edgar
+
+Treat these as research tools, not signals or promises of returns. Use time-aware data splits, walk-forward and out-of-sample evaluation, realistic spreads/fees/slippage/financing, and report drawdown and sensitivity alongside returns.
+
 ## NewsAPI setup
 1. Create an account and obtain an API key at https://newsapi.org/.
 2. In Render, open the service Environment settings and add `NEWS_API_KEY` as a secret environment variable.
