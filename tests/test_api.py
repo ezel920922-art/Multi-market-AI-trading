@@ -123,7 +123,7 @@ def test_paper_order_rejects_buy_with_stop_loss_above_entry(monkeypatch):
     assert "stop-loss must be below entry" in response.json()["detail"]
 
 
-def test_paper_order_rejects_sell_with_take_profit_above_entry(monkeypatch):
+def test_paper_order_accepts_sell_with_take_profit_below_entry(monkeypatch):
     monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
     response = client.post("/paper/orders", headers=auth_headers(), json={
         "signal": {
@@ -165,3 +165,25 @@ def test_paper_order_rejects_risk_above_per_trade_limit(monkeypatch):
     })
     assert response.status_code == 422
     assert "exceeds configured limit" in response.json()["detail"]
+
+
+def test_paper_order_rejects_sell_with_take_profit_above_entry(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {
+            "strategy_id": "safety-test",
+            "market": "equities",
+            "symbol": "TEST",
+            "side": "sell",
+            "entry": 100,
+            "stop_loss": 101,
+            "take_profit": 102,
+            "confidence": 0.9,
+            "rationale": "short target above entry is invalid"
+        },
+        "quantity": 1,
+        "risk_amount": 25,
+        "idempotency_key": "safety-sell-tp-invalid-001"
+    })
+    assert response.status_code == 422
+    assert "take-profit must be below entry" in response.json()["detail"]
