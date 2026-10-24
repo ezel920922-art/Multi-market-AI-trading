@@ -1,5 +1,9 @@
 import hmac
 import os
+import json
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.responses import HTMLResponse
@@ -89,6 +93,53 @@ def submit_paper_order(payload: SubmitSignalRequest):
     except RiskRejected as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+
+@app.get("/api/integrations")
+def integration_status():
+    return {
+        "mode": "paper_only",
+        "real_execution_enabled": False,
+        "newsapi": {"configured": bool(os.getenv("NEWS_API_KEY", "").strip())},
+        "brokers": {
+            "metatrader5": {"configured": False, "mode": "local_terminal_required"},
+            "interactive_brokers": {"configured": False, "mode": "credentials_and_gateway_required"},
+            "alpaca": {"configured": False, "mode": "paper_account_and_api_keys_required"},
+            "tradingview": {"configured": False, "mode": "webhook_setup_required"},
+        },
+    }
+
+
+@app.get("/api/news")
+def market_news():
+    api_key = os.getenv("NEWS_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="NEWS_API_KEY is not configured; use the official source links in the dashboard")
+    query = urlencode({"country": "us", "category": "business", "pageSize": 10, "apiKey": api_key})
+    request = Request(
+        "https://newsapi.org/v2/top-headlines?" + query,
+        headers={"Accept": "application/json", "User-Agent": "MultiMarketAI/0.3"},
+    )
+    try:
+        with urlopen(request, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        if exc.code in (401, 403):
+            raise HTTPException(status_code=502, detail="News provider rejected its API credentials") from exc
+        raise HTTPException(status_code=502, detail="News provider returned an HTTP error") from exc
+    except (URLError, TimeoutError, ValueError):
+        raise HTTPException(status_code=502, detail="News provider is temporarily unavailable") from None
+    if payload.get("status") != "ok":
+        raise HTTPException(status_code=502, detail="News provider did not return a successful response")
+    articles = []
+    for item in payload.get("articles", [])[:10]:
+        articles.append({
+            "title": item.get("title"),
+            "source": (item.get("source") or {}).get("name"),
+            "published_at": item.get("publishedAt"),
+            "url": item.get("url"),
+            "description": item.get("description"),
+        })
+    return {"provider": "NewsAPI", "count": len(articles), "articles": articles}
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def dashboard():
