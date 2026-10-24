@@ -1,6 +1,8 @@
 import hmac
 import os
+from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from app.models import Signal, OrderRequest
 from app.engine import TradingEngine
@@ -86,3 +88,9 @@ def submit_paper_order(payload: SubmitSignalRequest):
         return result.model_dump(mode="json")
     except RiskRejected as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def dashboard():
+    dashboard_file = Path(__file__).with_name("dashboard.html")
+    return HTMLResponse(content=dashboard_file.read_text(encoding="utf-8"))
