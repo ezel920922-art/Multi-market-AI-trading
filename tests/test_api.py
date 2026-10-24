@@ -78,8 +78,10 @@ def test_paper_order_rejects_infinite_quantity(monkeypatch):
 def test_dashboard_has_professional_sections():
     response = client.get("/")
     assert response.status_code == 200
-    for section in ("brokers", "news", "strategies", "toolkit"):
+    for section in ("brokers", "verification", "news", "strategies", "lab", "toolkit"):
         assert f'id="{section}"' in response.text
+    assert "BrokerCheck" in response.text
+    assert "TradingView" in response.text
     assert "Paper trading only" in response.text or "التداول الورقي فقط" in response.text
 
 
