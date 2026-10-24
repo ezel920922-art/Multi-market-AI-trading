@@ -187,3 +187,53 @@ def test_paper_order_rejects_sell_with_take_profit_above_entry(monkeypatch):
     })
     assert response.status_code == 422
     assert "take-profit must be below entry" in response.json()["detail"]
+
+
+def test_setup_analysis_calculates_risk_without_placing_order(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/api/analysis/setup", headers=auth_headers(), json={
+        "market": "equities",
+        "symbol": "test",
+        "side": "buy",
+        "entry": 100,
+        "stop_loss": 99,
+        "take_profit": 102,
+        "equity": 10000,
+        "risk_pct": 0.005
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "analysis_only"
+    assert body["order_placed"] is False
+    assert body["symbol"] == "TEST"
+    assert body["risk_budget"] == 50
+    assert body["reward_risk_ratio"] == 2
+    assert body["suggested_quantity"] == 50
+
+
+def test_setup_analysis_rejects_invalid_buy_direction(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/api/analysis/setup", headers=auth_headers(), json={
+        "market": "forex",
+        "symbol": "EURUSD",
+        "side": "buy",
+        "entry": 1.1,
+        "stop_loss": 1.11,
+        "take_profit": 1.12
+    })
+    assert response.status_code == 422
+    assert "stop_loss < entry < take_profit" in response.json()["detail"]
+
+
+def test_setup_analysis_caps_risk_percentage_at_half_percent(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/api/analysis/setup", headers=auth_headers(), json={
+        "market": "equities",
+        "symbol": "TEST",
+        "side": "buy",
+        "entry": 100,
+        "stop_loss": 99,
+        "take_profit": 102,
+        "risk_pct": 0.01
+    })
+    assert response.status_code == 422
