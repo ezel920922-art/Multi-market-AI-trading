@@ -56,6 +56,21 @@ class RiskManager:
         self._seen_keys: set[str] = set()
         self._halted = False
 
+    def restore_persisted_state(self, realized_pnl: float, open_risk: float, halted: bool, trading_day) -> None:
+        """Restore durable risk state; daily loss counters reset at the UTC date boundary."""
+        if not isfinite(float(realized_pnl)) or not isfinite(float(open_risk)) or open_risk < 0:
+            raise ValueError("Persisted risk values are invalid")
+        with self._lock:
+            current_day = datetime.now(timezone.utc).date()
+            self._day = current_day
+            self._open_risk = float(open_risk)
+            if trading_day == current_day:
+                self._realized_pnl = float(realized_pnl)
+                self._halted = bool(halted)
+            else:
+                self._realized_pnl = 0.0
+                self._halted = False
+
     def _roll_day(self) -> None:
         """Reset daily PnL/halt at the UTC day boundary; preserve open exposure."""
         current_day = datetime.now(timezone.utc).date()
