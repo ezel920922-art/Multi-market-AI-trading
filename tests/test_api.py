@@ -286,3 +286,43 @@ def test_api_documentation_is_disabled():
     assert client.get("/docs").status_code == 404
     assert client.get("/redoc").status_code == 404
     assert client.get("/openapi.json").status_code == 404
+
+
+def test_health_degrades_when_persistence_is_required_but_missing(monkeypatch):
+    from app import main
+
+    monkeypatch.setenv("REQUIRE_PERSISTENCE", "true")
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.setattr(main, "store", None)
+    monkeypatch.setattr(main, "database_ready", False)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "degraded"
+    assert response.json()["persistence_required"] is True
+
+
+def test_paper_order_fails_closed_when_persistence_is_required_but_missing(monkeypatch):
+    from app import main
+
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setenv("REQUIRE_PERSISTENCE", "true")
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.setattr(main, "store", None)
+    monkeypatch.setattr(main, "database_ready", False)
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {
+            "strategy_id": "persistence-required-test",
+            "market": "equities",
+            "symbol": "TEST",
+            "side": "buy",
+            "entry": 100,
+            "stop_loss": 99,
+            "take_profit": 102,
+            "confidence": 0.9
+        },
+        "quantity": 1,
+        "risk_amount": 25,
+        "idempotency_key": "persistence-required-001"
+    })
+    assert response.status_code == 503
+    assert "Durable database persistence is required" in response.json()["detail"]
