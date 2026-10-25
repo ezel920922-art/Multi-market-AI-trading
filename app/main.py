@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from pathlib import Path
+from threading import RLock
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
@@ -19,6 +20,9 @@ app = FastAPI(title="Multi-Market Trading Agency", version="0.2.0",
 engine = TradingEngine()
 store = PostgresStore.from_env()
 database_ready = False
+# Serialize the full in-process risk-reserve + durable-write sequence.
+# Horizontal scaling requires a database-level atomic risk reservation instead.
+order_submission_lock = RLock()
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -104,39 +108,40 @@ def risk_status():
 
 @app.post("/paper/orders", dependencies=[Depends(require_api_key)])
 def submit_paper_order(payload: SubmitSignalRequest):
-    if persistence_required() and store is None:
-        raise HTTPException(status_code=503, detail="Durable database persistence is required before accepting paper orders")
-    if store is not None:
-        if not database_ready:
-            raise HTTPException(status_code=503, detail="Database persistence is unavailable")
-        try:
-            if store.has_order_key(payload.idempotency_key):
-                raise HTTPException(status_code=409, detail="Idempotency key has already been used")
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise HTTPException(status_code=503, detail="Could not verify order idempotency") from exc
-    try:
-        result = engine.submit_signal(payload.signal, payload.quantity, payload.risk_amount,
-                                      payload.idempotency_key)
+    with order_submission_lock:
+        if persistence_required() and store is None:
+            raise HTTPException(status_code=503, detail="Durable database persistence is required before accepting paper orders")
         if store is not None:
-            request = OrderRequest(signal=payload.signal, quantity=payload.quantity,
-                                   risk_amount=payload.risk_amount,
-                                   idempotency_key=payload.idempotency_key)
+            if not database_ready:
+                raise HTTPException(status_code=503, detail="Database persistence is unavailable")
             try:
-                store.persist_order(request, result, engine.risk.status)
-            except DuplicateOrderKey as exc:
-                # The paper engine reserves risk before persistence. Undo that reservation
-                # if the database rejects a duplicate key (including a concurrent race).
-                engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
+                if store.has_order_key(payload.idempotency_key):
+                    raise HTTPException(status_code=409, detail="Idempotency key has already been used")
+            except HTTPException:
+                raise
             except Exception as exc:
-                # Fail closed: never leave phantom exposure in memory after a failed write.
-                engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
-                raise HTTPException(status_code=503, detail="Paper order was not durably recorded") from exc
-        return result.model_dump(mode="json")
-    except RiskRejected as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+                raise HTTPException(status_code=503, detail="Could not verify order idempotency") from exc
+        try:
+            result = engine.submit_signal(payload.signal, payload.quantity, payload.risk_amount,
+                                          payload.idempotency_key)
+            if store is not None:
+                request = OrderRequest(signal=payload.signal, quantity=payload.quantity,
+                                       risk_amount=payload.risk_amount,
+                                       idempotency_key=payload.idempotency_key)
+                try:
+                    store.persist_order(request, result, engine.risk.status)
+                except DuplicateOrderKey as exc:
+                    # The paper engine reserves risk before persistence. Undo that reservation
+                    # if the database rejects a duplicate key (including a concurrent race).
+                    engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
+                    raise HTTPException(status_code=409, detail=str(exc)) from exc
+                except Exception as exc:
+                    # Fail closed: never leave phantom exposure in memory after a failed write.
+                    engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
+                    raise HTTPException(status_code=503, detail="Paper order was not durably recorded") from exc
+            return result.model_dump(mode="json")
+        except RiskRejected as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/analysis/setup", dependencies=[Depends(require_api_key)])

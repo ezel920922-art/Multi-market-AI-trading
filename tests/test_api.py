@@ -91,6 +91,61 @@ def test_paper_order_releases_reserved_risk_when_persistence_fails(monkeypatch):
     assert "persist-failure-001" not in main.engine.risk._seen_keys
 
 
+def test_concurrent_paper_orders_serialize_persistence(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Lock
+    from time import sleep
+    from app import main
+    from app.engine import TradingEngine
+
+    class TrackingStore:
+        def __init__(self):
+            self.guard = Lock()
+            self.active = 0
+            self.max_active = 0
+
+        def has_order_key(self, key):
+            return False
+
+        def persist_order(self, request, result, risk_status):
+            with self.guard:
+                self.active += 1
+                self.max_active = max(self.max_active, self.active)
+            sleep(0.03)
+            with self.guard:
+                self.active -= 1
+
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setattr(main, "engine", TradingEngine())
+    store = TrackingStore()
+    monkeypatch.setattr(main, "store", store)
+    monkeypatch.setattr(main, "database_ready", True)
+
+    def submit(index):
+        return client.post("/paper/orders", headers=auth_headers(), json={
+            "signal": {
+                "strategy_id": "concurrency-test",
+                "market": "equities",
+                "symbol": f"TEST{index}",
+                "side": "buy",
+                "entry": 100,
+                "stop_loss": 99,
+                "take_profit": 102,
+                "confidence": 0.9,
+            },
+            "quantity": 1,
+            "risk_amount": 25,
+            "idempotency_key": f"concurrency-test-key-{index:03d}",
+        })
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        responses = list(pool.map(submit, range(4)))
+
+    assert all(response.status_code == 200 for response in responses)
+    assert store.max_active == 1
+    assert main.engine.risk.status["open_risk"] == 100
+
+
 def test_paper_order_rejects_infinite_quantity(monkeypatch):
     monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
     response = client.post("/paper/orders", headers=auth_headers(), json={
