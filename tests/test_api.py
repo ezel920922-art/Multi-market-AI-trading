@@ -130,9 +130,16 @@ def test_integration_status_does_not_expose_secrets(monkeypatch):
     assert response.json()["real_execution_enabled"] is False
 
 
-def test_news_endpoint_requires_server_side_key(monkeypatch):
-    monkeypatch.delenv("NEWS_API_KEY", raising=False)
+def test_news_endpoint_requires_api_key(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
     response = client.get("/api/news")
+    assert response.status_code == 401
+
+
+def test_news_endpoint_requires_server_side_key(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.delenv("NEWS_API_KEY", raising=False)
+    response = client.get("/api/news", headers=auth_headers())
     assert response.status_code == 503
     assert "not configured" in response.json()["detail"]
 
@@ -273,3 +280,56 @@ def test_setup_analysis_caps_risk_percentage_at_half_percent(monkeypatch):
         "risk_pct": 0.01
     })
     assert response.status_code == 422
+
+def test_security_headers_are_applied(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.get("/health")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+
+def test_api_documentation_is_disabled():
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_health_degrades_when_persistence_is_required_but_missing(monkeypatch):
+    from app import main
+
+    monkeypatch.setenv("REQUIRE_PERSISTENCE", "true")
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.setattr(main, "store", None)
+    monkeypatch.setattr(main, "database_ready", False)
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "degraded"
+    assert response.json()["persistence_required"] is True
+
+
+def test_paper_order_fails_closed_when_persistence_is_required_but_missing(monkeypatch):
+    from app import main
+
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setenv("REQUIRE_PERSISTENCE", "true")
+    monkeypatch.delenv("RENDER", raising=False)
+    monkeypatch.setattr(main, "store", None)
+    monkeypatch.setattr(main, "database_ready", False)
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {
+            "strategy_id": "persistence-required-test",
+            "market": "equities",
+            "symbol": "TEST",
+            "side": "buy",
+            "entry": 100,
+            "stop_loss": 99,
+            "take_profit": 102,
+            "confidence": 0.9
+        },
+        "quantity": 1,
+        "risk_amount": 25,
+        "idempotency_key": "persistence-required-001"
+    })
+    assert response.status_code == 503
+    assert "Durable database persistence is required" in response.json()["detail"]

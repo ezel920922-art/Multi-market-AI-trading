@@ -5,8 +5,8 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from pathlib import Path
-from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 from app.models import Signal, OrderRequest, MarketType, Side
 from app.engine import TradingEngine
@@ -14,10 +14,27 @@ from app.risk import RiskRejected
 from app.storage import DuplicateOrderKey, PostgresStore
 
 app = FastAPI(title="Multi-Market Trading Agency", version="0.2.0",
-              description="Paper-only API. No real broker execution is available.")
+              description="Paper-only API. No real broker execution is available.",
+              docs_url=None, redoc_url=None, openapi_url=None)
 engine = TradingEngine()
 store = PostgresStore.from_env()
 database_ready = False
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Apply baseline browser security headers to every response."""
+    response: Response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+    # API responses may contain account/risk state and should not be stored by shared caches.
+    if request.url.path.startswith("/api/") or request.url.path.startswith("/risk/") or request.url.path.startswith("/paper/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    if request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 class SubmitSignalRequest(BaseModel):
     signal: Signal
@@ -34,6 +51,13 @@ class SetupAnalysisRequest(BaseModel):
     take_profit: float = Field(gt=0, allow_inf_nan=False)
     equity: float = Field(default=10_000, gt=0, allow_inf_nan=False)
     risk_pct: float = Field(default=0.005, gt=0, le=0.005, allow_inf_nan=False)
+
+def persistence_required() -> bool:
+    """Require durable order/risk state on hosted or explicitly production deployments."""
+    return (os.getenv("REQUIRE_PERSISTENCE", "").strip().lower() == "true"
+            or os.getenv("APP_ENV", "").strip().lower() == "production"
+            or os.getenv("RENDER", "").strip().lower() == "true")
+
 
 def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
     expected = os.getenv("TRADING_API_KEY", "")
@@ -64,18 +88,24 @@ def startup():
 
 @app.get("/health")
 def health():
-    return {"status": "ok" if store is None or database_ready else "degraded",
+    ready = (store is not None and database_ready) or (store is None and not persistence_required())
+    return {"status": "ok" if ready else "degraded",
             "mode": "paper_only", "real_execution_enabled": False,
-            "persistence": "postgresql" if store is not None and database_ready else "memory_only"}
+            "persistence": "postgresql" if store is not None and database_ready else "memory_only",
+            "persistence_required": persistence_required()}
 
 @app.get("/risk/status", dependencies=[Depends(require_api_key)])
 def risk_status():
+    if persistence_required() and store is None:
+        raise HTTPException(status_code=503, detail="Durable database persistence is required in production")
     if store is not None and not database_ready:
         raise HTTPException(status_code=503, detail="Database persistence is unavailable")
     return engine.risk.status
 
 @app.post("/paper/orders", dependencies=[Depends(require_api_key)])
 def submit_paper_order(payload: SubmitSignalRequest):
+    if persistence_required() and store is None:
+        raise HTTPException(status_code=503, detail="Durable database persistence is required before accepting paper orders")
     if store is not None:
         if not database_ready:
             raise HTTPException(status_code=503, detail="Database persistence is unavailable")
@@ -158,7 +188,7 @@ def integration_status():
     }
 
 
-@app.get("/api/news")
+@app.get("/api/news", dependencies=[Depends(require_api_key)])
 def market_news():
     api_key = os.getenv("NEWS_API_KEY", "").strip()
     if not api_key:
