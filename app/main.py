@@ -188,7 +188,7 @@ def integration_status():
     }
 
 
-@app.get("/api/news")
+@app.get("/api/news", dependencies=[Depends(require_api_key)])
 def market_news():
     api_key = os.getenv("NEWS_API_KEY", "").strip()
     if not api_key:
