@@ -95,6 +95,15 @@ class RiskManager:
             self._roll_day()
             self._open_risk = max(0.0, self._open_risk - max(0.0, float(amount)))
 
+    def release_reservation(self, amount: float, idempotency_key: str) -> None:
+        """Undo a reservation when its order was not durably persisted."""
+        if not isfinite(float(amount)):
+            raise ValueError("amount must be finite")
+        with self._lock:
+            self._roll_day()
+            self._open_risk = max(0.0, self._open_risk - max(0.0, float(amount)))
+            self._seen_keys.discard(idempotency_key)
+
     def approve(self, signal: Signal, risk_amount: float, idempotency_key: str) -> None:
         with self._lock:
             self._roll_day()
