@@ -55,6 +55,41 @@ def test_paper_order_endpoint(monkeypatch):
     assert body["status"] == "paper_filled"
     assert body["order_id"].startswith("PAPER-")
 
+def test_paper_order_releases_reserved_risk_when_persistence_fails(monkeypatch):
+    from app import main
+    from app.engine import TradingEngine
+
+    class FailingStore:
+        def has_order_key(self, key):
+            return False
+
+        def persist_order(self, request, result, risk_status):
+            raise RuntimeError("simulated database outage")
+
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setattr(main, "engine", TradingEngine())
+    monkeypatch.setattr(main, "store", FailingStore())
+    monkeypatch.setattr(main, "database_ready", True)
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {
+            "strategy_id": "persistence-failure-test",
+            "market": "equities",
+            "symbol": "TEST",
+            "side": "buy",
+            "entry": 100,
+            "stop_loss": 99,
+            "take_profit": 102,
+            "confidence": 0.9,
+        },
+        "quantity": 1,
+        "risk_amount": 25,
+        "idempotency_key": "persist-failure-001",
+    })
+
+    assert response.status_code == 503
+    assert main.engine.risk.status["open_risk"] == 0
+
+
 def test_paper_order_rejects_infinite_quantity(monkeypatch):
     monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
     response = client.post("/paper/orders", headers=auth_headers(), json={
