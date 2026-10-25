@@ -273,3 +273,16 @@ def test_setup_analysis_caps_risk_percentage_at_half_percent(monkeypatch):
         "risk_pct": 0.01
     })
     assert response.status_code == 422
+
+def test_security_headers_are_applied(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.get("/health")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+
+def test_api_documentation_is_disabled():
+    assert client.get("/docs").status_code == 404
+    assert client.get("/redoc").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
