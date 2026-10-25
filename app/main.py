@@ -52,6 +52,13 @@ class SetupAnalysisRequest(BaseModel):
     equity: float = Field(default=10_000, gt=0, allow_inf_nan=False)
     risk_pct: float = Field(default=0.005, gt=0, le=0.005, allow_inf_nan=False)
 
+def persistence_required() -> bool:
+    """Require durable order/risk state on hosted or explicitly production deployments."""
+    return (os.getenv("REQUIRE_PERSISTENCE", "").strip().lower() == "true"
+            or os.getenv("APP_ENV", "").strip().lower() == "production"
+            or os.getenv("RENDER", "").strip().lower() == "true")
+
+
 def require_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:
     expected = os.getenv("TRADING_API_KEY", "")
     if len(expected) < 32:
@@ -81,18 +88,24 @@ def startup():
 
 @app.get("/health")
 def health():
-    return {"status": "ok" if store is None or database_ready else "degraded",
+    ready = (store is not None and database_ready) or (store is None and not persistence_required())
+    return {"status": "ok" if ready else "degraded",
             "mode": "paper_only", "real_execution_enabled": False,
-            "persistence": "postgresql" if store is not None and database_ready else "memory_only"}
+            "persistence": "postgresql" if store is not None and database_ready else "memory_only",
+            "persistence_required": persistence_required()}
 
 @app.get("/risk/status", dependencies=[Depends(require_api_key)])
 def risk_status():
+    if persistence_required() and store is None:
+        raise HTTPException(status_code=503, detail="Durable database persistence is required in production")
     if store is not None and not database_ready:
         raise HTTPException(status_code=503, detail="Database persistence is unavailable")
     return engine.risk.status
 
 @app.post("/paper/orders", dependencies=[Depends(require_api_key)])
 def submit_paper_order(payload: SubmitSignalRequest):
+    if persistence_required() and store is None:
+        raise HTTPException(status_code=503, detail="Durable database persistence is required before accepting paper orders")
     if store is not None:
         if not database_ready:
             raise HTTPException(status_code=503, detail="Database persistence is unavailable")
