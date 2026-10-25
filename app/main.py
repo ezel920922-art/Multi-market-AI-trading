@@ -96,8 +96,13 @@ def submit_paper_order(payload: SubmitSignalRequest):
             try:
                 store.persist_order(request, result, engine.risk.status)
             except DuplicateOrderKey as exc:
+                # The paper engine reserves risk before persistence. Undo that reservation
+                # if the database rejects a duplicate key (including a concurrent race).
+                engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
             except Exception as exc:
+                # Fail closed: never leave phantom exposure in memory after a failed write.
+                engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
                 raise HTTPException(status_code=503, detail="Paper order was not durably recorded") from exc
         return result.model_dump(mode="json")
     except RiskRejected as exc:
