@@ -5,8 +5,8 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from pathlib import Path
-from fastapi import Depends, FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 from app.models import Signal, OrderRequest, MarketType, Side
 from app.engine import TradingEngine
@@ -14,10 +14,27 @@ from app.risk import RiskRejected
 from app.storage import DuplicateOrderKey, PostgresStore
 
 app = FastAPI(title="Multi-Market Trading Agency", version="0.2.0",
-              description="Paper-only API. No real broker execution is available.")
+              description="Paper-only API. No real broker execution is available.",
+              docs_url=None, redoc_url=None, openapi_url=None)
 engine = TradingEngine()
 store = PostgresStore.from_env()
 database_ready = False
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Apply baseline browser security headers to every response."""
+    response: Response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault("Cross-Origin-Resource-Policy", "same-origin")
+    # API responses may contain account/risk state and should not be stored by shared caches.
+    if request.url.path.startswith("/api/") or request.url.path.startswith("/risk/") or request.url.path.startswith("/paper/"):
+        response.headers.setdefault("Cache-Control", "no-store")
+    if request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 class SubmitSignalRequest(BaseModel):
     signal: Signal
