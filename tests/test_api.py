@@ -88,6 +88,7 @@ def test_paper_order_releases_reserved_risk_when_persistence_fails(monkeypatch):
 
     assert response.status_code == 503
     assert main.engine.risk.status["open_risk"] == 0
+    assert "persist-failure-001" not in main.engine.risk._seen_keys
 
 
 def test_paper_order_rejects_infinite_quantity(monkeypatch):
