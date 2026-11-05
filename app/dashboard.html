@@ -25,6 +25,10 @@
 .agent-result pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#ddd;font:12px/1.7 ui-monospace,monospace;direction:ltr;text-align:left}
 .agent-vote{display:inline-block;border:1px solid #3a3a3a;border-radius:8px;padding:4px 8px;margin:3px;font-size:11px}
 @media(max-width:700px){.agent-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.agent-pool{grid-template-columns:1fr}}
+
+.agent-chart{margin:12px 0 16px;padding:14px;border:1px solid #303030;border-radius:12px;background:#090909}
+.agent-chart svg{width:100%;height:auto;display:block;min-height:180px}
+.agent-chart-note{color:#999;font-size:11px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -125,10 +129,11 @@ document.getElementById('copyChecklist')?.addEventListener('click',async()=>{con
     <button class="btn" id="agentRefresh">↻ تحديث الوكلاء</button>
   </div>
   <div class="agent-pool">
-    <div><b id="agentCount">6</b><span>وكلاء متخصصون</span></div>
+    <div><b id="agentCount">6</b><span>وكلاء متخصصون</span></div><div><b id="poolState">ورقي فقط</b><span>المحفظة · لا يوجد ربط بحساب حي</span></div><div><b id="poolPnl">—</b><span>الربح/الخسارة اليومية · بيانات API</span></div><div><b id="poolRisk">—</b><span>المخاطر المفتوحة</span></div>
     <div><b id="poolState">غير متصل</b><span>المحفظة الموحدة · لا يوجد رصيد حي مرتبط</span></div>
     <div><b id="consensusState">بانتظار البيانات</b><span>قرار الإجماع · لا أوامر تلقائية</span></div>
   </div>
+  <div class="agent-chart"><div class="section-title"><div><h3>مخطط الشموع · Market Structure</h3><div class="sub" id="agentChartMeta">سيظهر بعد إدخال بيانات OHLCV والتحليل</div></div><span class="agent-state">USER DATA ONLY</span></div><svg id="agentCandleChart" viewBox="0 0 760 250" role="img" aria-label="Candlestick chart"><text x="380" y="125" text-anchor="middle" fill="#888" font-size="14">بانتظار بيانات السوق</text></svg><div class="agent-chart-note">المخطط يعرض الشموع التي أدخلتها فقط؛ لا توجد أسعار مباشرة أو شموع مولدة.</div></div>
   <div class="agent-grid" id="agentCards">
     <div class="agent-card"><div class="agent-top"><strong>NOVA</strong><span class="agent-state">جارٍ التحميل</span></div><small>Trend & EMA structure</small></div>
     <div class="agent-card"><div class="agent-top"><strong>ORION</strong><span class="agent-state">جارٍ التحميل</span></div><small>Momentum confirmation</small></div>
@@ -168,6 +173,30 @@ refreshHealth();
 <script>
 (async function(){
  const byId=id=>document.getElementById(id);
+ function drawCandles(candles){
+  const svg=byId('agentCandleChart');while(svg.firstChild)svg.removeChild(svg.firstChild);
+  const NS='http://www.w3.org/2000/svg',W=760,H=250,pad=24;
+  const data=candles.slice(-60),lo=Math.min(...data.map(c=>Number(c.low))),hi=Math.max(...data.map(c=>Number(c.high)));
+  if(!(hi>lo)){svg.textContent='النطاق السعري غير صالح';return;}
+  const y=v=>H-pad-((Number(v)-lo)/(hi-lo))*(H-2*pad);
+  const step=(W-2*pad)/data.length,body=Math.max(3,Math.min(9,step*.58));
+  for(let k=0;k<4;k++){const yy=pad+k*(H-2*pad)/3;const g=document.createElementNS(NS,'line');g.setAttribute('x1',pad);g.setAttribute('x2',W-pad);g.setAttribute('y1',yy);g.setAttribute('y2',yy);g.setAttribute('stroke','#292929');g.setAttribute('stroke-dasharray','3 5');svg.appendChild(g);}
+  data.forEach((c,i)=>{
+   const x=pad+step*(i+.5),up=Number(c.close)>=Number(c.open),col=up?'#42d392':'#ff6464';
+   const wick=document.createElementNS(NS,'line');wick.setAttribute('x1',x);wick.setAttribute('x2',x);wick.setAttribute('y1',y(c.high));wick.setAttribute('y2',y(c.low));wick.setAttribute('stroke',col);wick.setAttribute('stroke-width','1.5');svg.appendChild(wick);
+   const rect=document.createElementNS(NS,'rect');rect.setAttribute('x',x-body/2);rect.setAttribute('y',Math.min(y(c.open),y(c.close)));rect.setAttribute('width',body);rect.setAttribute('height',Math.max(2,Math.abs(y(c.open)-y(c.close))));rect.setAttribute('fill',col);rect.setAttribute('rx','1');svg.appendChild(rect);
+  });
+  byId('agentChartMeta').textContent=(data[0].symbol||'')+' · '+data.length+' شمعة أخيرة · '+String(data[data.length-1].timestamp||'');
+ }
+ async function loadPaperPool(){
+  const key=byId('apiKey')?.value?.trim();if(!key)return;
+  try{const r=await fetch('/risk/status',{headers:{'X-API-Key':key},cache:'no-store'});const d=await r.json();
+   if(!r.ok){byId('poolPnl').textContent='غير متاح';byId('poolRisk').textContent='—';return;}
+   byId('poolPnl').textContent=Number(d.realized_pnl||0).toFixed(2);
+   byId('poolRisk').textContent=Number(d.open_risk||0).toFixed(2);
+   byId('poolState').textContent=d.halted?'متوقف بالمخاطر':'تداول ورقي';
+  }catch(e){byId('poolPnl').textContent='خطأ اتصال';}
+ }
  async function loadAgents(){
   try{
    const r=await fetch('/api/agents/status',{cache:'no-store'}),d=await r.json();
@@ -177,12 +206,15 @@ refreshHealth();
   }catch(e){byId('poolState').textContent='تعذر الاتصال';}
  }
  byId('agentRefresh')?.addEventListener('click',loadAgents);
+ byId('agentRefresh')?.addEventListener('click',loadPaperPool);
+ byId('apiKey')?.addEventListener('change',loadPaperPool);
  byId('runAgents')?.addEventListener('click',async()=>{
   const key=byId('apiKey')?.value?.trim();
   if(!key){toast('أدخل مفتاح API في قسم إعدادات الاتصال أولاً');return;}
   let candles;
   try{candles=JSON.parse(byId('agentCandles').value);if(!Array.isArray(candles))throw new Error('يجب إدخال مصفوفة JSON');}
   catch(e){toast('صيغة JSON غير صحيحة: '+e.message);return;}
+  drawCandles(candles);
   const btn=byId('runAgents');btn.disabled=true;btn.textContent='جارٍ التحليل…';
   try{
    const r=await fetch('/api/agents/analyze',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':key},body:JSON.stringify({candles}),cache:'no-store'});
