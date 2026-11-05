@@ -71,7 +71,7 @@ def fetch_candles(market: MarketType, symbol: str, interval: str = "1min", outpu
     except (KeyError, TypeError, ValueError) as exc:
         raise MarketProviderError("Market data provider returned malformed candle data") from exc
     freshness_limits = {"1min": 300, "5min": 900, "15min": 1800,
-                        "30min": 3600, "1h": 7200, "4h": 18000, "1day": 90000}
+                        "30min": 3600, "1h": 7200, "4h": 18000, "1day": 345600}
     try:
         validate_candle_series(candles, max_staleness_seconds=freshness_limits[interval])
     except MarketDataQualityError as exc:
