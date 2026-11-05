@@ -41,7 +41,7 @@ async def security_headers(request: Request, call_next):
     return response
 
 from app.market_data import Candle
-from app.agents import AGENTS, analyze_market
+from app.agents import AGENTS, analyze_market, analyze_historical_spectrogram
 from app.market_provider import fetch_candles, provider_status, MarketProviderError
 from app.backtest import run_ema_backtest
 
@@ -274,6 +274,15 @@ def agents_analyze(payload: AgentAnalysisRequest):
     """Run six independent rule-based votes over real supplied candles. Never submits orders."""
     try:
         return analyze_market(payload.candles)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/agents/spectrogram", dependencies=[Depends(require_api_key)])
+def agents_spectrogram(payload: AgentAnalysisRequest):
+    """Replay historical OHLCV windows to render agent signals; no forward prediction."""
+    try:
+        return analyze_historical_spectrogram(payload.candles)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
