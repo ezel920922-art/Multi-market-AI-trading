@@ -48,3 +48,23 @@ def test_ema_backtest_rejects_mixed_symbols():
     rows[-1] = rows[-1].model_copy(update={"symbol": "OTHER"})
     with pytest.raises(ValueError, match="mixes markets or symbols"):
         run_ema_backtest(rows)
+
+
+
+def test_remaining_daily_risk_budget_caps_next_trade_to_daily_room():
+    from app.backtest import _remaining_daily_risk_budget
+    daily = {"2026-11-05": -140.0}
+    # A $10,000 account has only $10 of the $150 daily loss budget left.
+    assert _remaining_daily_risk_budget(10_000, 0.005, daily, "2026-11-05", 10_000) == 10.0
+
+
+def test_remaining_daily_risk_budget_blocks_after_daily_limit():
+    from app.backtest import _remaining_daily_risk_budget
+    daily = {"2026-11-05": -150.0}
+    assert _remaining_daily_risk_budget(10_000, 0.005, daily, "2026-11-05", 10_000) == 0.0
+
+
+def test_remaining_daily_risk_budget_does_not_carry_loss_between_days():
+    from app.backtest import _remaining_daily_risk_budget
+    daily = {"2026-11-04": -150.0}
+    assert _remaining_daily_risk_budget(10_000, 0.005, daily, "2026-11-05", 10_000) == 50.0
