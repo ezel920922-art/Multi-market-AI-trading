@@ -43,6 +43,7 @@ async def security_headers(request: Request, call_next):
 from app.market_data import Candle
 from app.agents import AGENTS, analyze_market
 from app.market_provider import fetch_candles, provider_status, MarketProviderError
+from app.backtest import run_ema_backtest
 
 class AgentAnalysisRequest(BaseModel):
     candles: list[Candle] = Field(min_length=1, max_length=500)
@@ -73,6 +74,19 @@ class KellySizingRequest(BaseModel):
     win_rate: float = Field(ge=0, le=1, allow_inf_nan=False)
     average_win_loss_ratio: float = Field(gt=0, le=20, allow_inf_nan=False)
     kelly_fraction: float = Field(default=0.25, gt=0, le=0.5, allow_inf_nan=False)
+
+
+class BacktestRequest(BaseModel):
+    candles: list[Candle] = Field(min_length=30, max_length=500)
+    fast_period: int = Field(default=8, ge=2, le=99)
+    slow_period: int = Field(default=21, ge=3, le=100)
+    initial_equity: float = Field(default=10_000, gt=0, allow_inf_nan=False)
+    risk_pct: float = Field(default=0.005, gt=0, le=0.005, allow_inf_nan=False)
+    spread_bps: float = Field(default=2, ge=0, le=100, allow_inf_nan=False)
+    slippage_bps: float = Field(default=1, ge=0, le=100, allow_inf_nan=False)
+    fee_bps: float = Field(default=1, ge=0, le=100, allow_inf_nan=False)
+    stop_atr_multiplier: float = Field(default=1.5, ge=0.5, le=10, allow_inf_nan=False)
+    reward_risk: float = Field(default=2, ge=0.5, le=10, allow_inf_nan=False)
 
 def persistence_required() -> bool:
     """Require durable order/risk state on hosted or explicitly production deployments."""
@@ -196,6 +210,23 @@ def analyze_setup(payload: SetupAnalysisRequest):
         "suggested_quantity": round(risk_budget / risk_per_unit, 8),
         "assumptions": ["Before fees, slippage, funding, and contract-size multipliers", "Not a trade recommendation"],
     }
+@app.post("/api/backtest/ema", dependencies=[Depends(require_api_key)])
+def backtest_ema(payload: BacktestRequest):
+    """Run a conservative next-bar EMA crossover simulation; never submits orders."""
+    if payload.fast_period >= payload.slow_period:
+        raise HTTPException(status_code=422, detail="fast_period must be lower than slow_period")
+    try:
+        return run_ema_backtest(
+            payload.candles, fast_period=payload.fast_period, slow_period=payload.slow_period,
+            initial_equity=payload.initial_equity, risk_pct=payload.risk_pct,
+            spread_bps=payload.spread_bps, slippage_bps=payload.slippage_bps,
+            fee_bps=payload.fee_bps, stop_atr_multiplier=payload.stop_atr_multiplier,
+            reward_risk=payload.reward_risk,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.post("/api/risk/kelly-size", dependencies=[Depends(require_api_key)])
 def kelly_position_size(payload: KellySizingRequest):
     """Calculate fractional-Kelly paper sizing; never creates or submits an order."""
