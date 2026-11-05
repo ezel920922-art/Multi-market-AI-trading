@@ -14,7 +14,7 @@ from app.models import Signal, OrderRequest, MarketType, Side
 from app.engine import TradingEngine
 from dataclasses import replace
 from app.risk import RiskRejected
-from app.storage import DuplicateOrderKey, OpenXauusdPosition, DurableRiskRejected, PostgresStore
+from app.storage import DuplicateOrderKey, OpenXauusdPosition, DurableRiskRejected, PostgresStore, _is_xauusd_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,7 @@ def submit_paper_order(payload: SubmitSignalRequest):
                 raise
             except Exception as exc:
                 raise HTTPException(status_code=503, detail="Could not verify order idempotency") from exc
-        if store is not None and payload.signal.symbol.strip().upper() == "XAUUSD":
+        if store is not None and _is_xauusd_symbol(payload.signal.symbol):
             try:
                 if store.has_open_xauusd(payload.signal.side.value):
                     raise HTTPException(status_code=409, detail="An XAUUSD paper position is already open; opposite, grid, and averaging entries are blocked")
