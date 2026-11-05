@@ -63,10 +63,10 @@ def test_fetch_candles_rejects_provider_error_payload(monkeypatch):
         fetch_candles(MarketType.forex, "NOTREAL", "1min", 35)
 
 
-def test_fetch_daily_candles_use_daily_freshness_window(monkeypatch):
+def test_fetch_daily_candles_allow_weekend_closure_age(monkeypatch):
     import app.market_provider as provider
     monkeypatch.setenv("TWELVEDATA_API_KEY", "test-key")
-    now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=2)
     rows = []
     for i in range(35):
         stamp = now - timedelta(days=34-i)
