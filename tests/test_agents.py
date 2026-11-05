@@ -47,3 +47,26 @@ def test_historical_spectrogram_replays_windows_without_forward_prediction():
     assert result['windows'] >= 1
     assert result['agents'] == ['PRIOR', 'EDGE', 'SPOTTER', 'TAKER', 'CLOSER', 'KELLY']
     assert all(len(row['agents']) == 6 for row in result['rows'])
+
+
+
+def test_agent_freshness_uses_selected_daily_interval():
+    from app.agents import analyze_market
+    candles = sample_candles()
+    candles = [
+        Candle(
+            market=c.market, symbol=c.symbol,
+            timestamp=c.timestamp - timedelta(hours=2),
+            open=c.open, high=c.high, low=c.low, close=c.close, volume=c.volume,
+        )
+        for c in candles
+    ]
+    with pytest.raises(ValueError, match="stale"):
+        analyze_market(candles, interval="1min")
+    result = analyze_market(candles, interval="1day")
+    assert result["data_quality"]["quality_ok"] is True
+
+
+def test_agent_rejects_unsupported_interval():
+    with pytest.raises(ValueError, match="Unsupported candle interval"):
+        analyze_market(sample_candles(), interval="2h")
