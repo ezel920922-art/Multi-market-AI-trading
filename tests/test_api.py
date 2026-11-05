@@ -681,3 +681,26 @@ def test_xauusd_new_position_blocked_when_one_is_already_open(monkeypatch):
     })
     assert response.status_code == 409
     assert "XAUUSD" in response.json()["detail"]
+
+
+
+def test_xauusd_punctuation_alias_is_blocked_when_position_is_open(monkeypatch):
+    from app import main
+    from app.engine import TradingEngine
+
+    class FakeStore:
+        def has_order_key(self, key): return False
+        def has_open_xauusd(self, side): return True
+
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setattr(main, "store", FakeStore())
+    monkeypatch.setattr(main, "database_ready", True)
+    monkeypatch.setattr(main, "engine", TradingEngine())
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {"strategy_id": "gold-alias-test", "market": "commodities",
+                   "symbol": "XAU/USD", "side": "sell", "entry": 2000,
+                   "stop_loss": 2010, "take_profit": 1980, "confidence": 0.95},
+        "quantity": 1, "risk_amount": 25, "idempotency_key": "xauusd-alias-guard-001"
+    })
+    assert response.status_code == 409
+    assert "XAUUSD" in response.json()["detail"]
