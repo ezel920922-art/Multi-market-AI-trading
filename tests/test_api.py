@@ -519,3 +519,28 @@ def test_ema_backtest_rejects_risk_above_cap(monkeypatch):
         'candles':[], 'risk_pct':0.01
     })
     assert response.status_code == 422
+
+
+def test_agent_spectrogram_replays_history_and_is_authenticated(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from app.market_data import Candle
+    from app.models import MarketType
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    now = datetime.now(timezone.utc)
+    candles = [Candle(market=MarketType.commodities, symbol="XAUUSD",
+        timestamp=now-timedelta(minutes=34-i), open=2000+i*.5,
+        high=2001+i*.5, low=1999+i*.5, close=2000.5+i*.5, volume=1000+i) for i in range(35)]
+    response=client.post('/api/agents/spectrogram',headers=auth_headers(),json={
+        'candles':[c.model_dump(mode='json') for c in candles]
+    })
+    assert response.status_code==200
+    body=response.json()
+    assert body['predictive'] is False
+    assert body['windows']>=1
+    assert len(body['rows'][0]['agents'])==6
+
+
+def test_agent_spectrogram_rejects_missing_api_key(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response=client.post('/api/agents/spectrogram',json={'candles':[]})
+    assert response.status_code==401
