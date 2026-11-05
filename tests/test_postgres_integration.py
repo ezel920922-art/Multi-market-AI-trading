@@ -70,8 +70,9 @@ def _new_order(prefix="pgtest-"):
 def _assert_insert_failure_rolls_back(store, config):
     """Force the final event insert to fail after order/risk writes have run."""
     request, result = _new_order(prefix="pgtest-rollback-")
-    trigger_name = "pgtest_force_event_failure"
-    function_name = "pgtest_raise_on_rollback_order"
+    suffix = uuid.uuid4().hex[:12]
+    trigger_name = f"pgtest_force_event_failure_{suffix}"
+    function_name = f"pgtest_raise_on_rollback_order_{suffix}"
 
     # The trigger is confined to this disposable, branch-guarded test database
     # and only rejects the unique order id generated for this rollback case.
