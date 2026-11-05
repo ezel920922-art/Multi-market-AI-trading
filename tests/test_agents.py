@@ -29,7 +29,8 @@ def test_six_agents_analyze_verified_candles_without_execution():
     assert result["order_placed"] is False
     assert result["execution_enabled"] is False
     assert len(result["agents"]) == 6
-    assert result["agents"][-1]["name"] == "DASH"
+    assert result["agents"][-1]["name"] == "KELLY"
+    assert [agent["name"] for agent in result["agents"]] == ["PRIOR", "EDGE", "SPOTTER", "TAKER", "CLOSER", "KELLY"]
     assert result["symbol"] == "XAUUSD"
 
 
