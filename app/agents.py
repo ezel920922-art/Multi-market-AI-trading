@@ -1,7 +1,7 @@
 """Six-agent, rule-based market analysis. No broker execution or synthetic prices."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from datetime import timedelta
 from math import isfinite
 from statistics import mean
 from app.market_data import Candle, validate_candle_series
@@ -29,9 +29,9 @@ def _vote(direction: str, confidence: float, reason: str) -> dict:
     return {"vote": direction, "confidence": round(max(0.0, min(1.0, confidence)), 3), "reason": reason}
 
 
-def analyze_market(candles: list[Candle]) -> dict:
-    """Analyze a supplied, validated OHLCV series; never invent prices."""
-    quality = validate_candle_series(candles, max_staleness_seconds=300)
+def analyze_market(candles: list[Candle], *, validation_now=None) -> dict:
+    """Analyze supplied OHLCV; validation_now is internal-only for historical replay."""
+    quality = validate_candle_series(candles, now=validation_now, max_staleness_seconds=300)
     if len(candles) < 30:
         raise ValueError("At least 30 recent candles are required for six-agent analysis")
     closes = [float(c.close) for c in candles]
@@ -97,3 +97,31 @@ def analyze_market(candles: list[Candle]) -> dict:
         "agents":[dict(AGENTS[i], **votes[i]) for i in range(6)],
         "disclaimer":"تحليل قواعدي لبيانات OHLCV المقدمة فقط؛ ليس توصية مالية ولا يرسل أوامر.",
     }
+
+
+def analyze_historical_spectrogram(candles: list[Candle], max_windows: int = 24) -> dict:
+    """Replay rolling historical windows to produce a non-predictive agent vote matrix."""
+    if len(candles) < 30:
+        raise ValueError("At least 30 candles are required for historical signal analysis")
+    if not 1 <= max_windows <= 48:
+        raise ValueError("max_windows must be between 1 and 48")
+    # Validate the complete sequence once, using its own end timestamp.
+    from app.market_data import validate_candle_series
+    validate_candle_series(candles, now=candles[-1].timestamp + timedelta(seconds=1), max_staleness_seconds=2)
+    step = max(1, (len(candles) - 30) // max(1, max_windows - 1))
+    ends = list(range(30, len(candles) + 1, step))
+    if ends[-1] != len(candles):
+        ends.append(len(candles))
+    ends = ends[-max_windows:]
+    rows = []
+    for end in ends:
+        window = candles[max(0, end - 60):end]
+        result = analyze_market(window, validation_now=window[-1].timestamp + timedelta(seconds=1))
+        rows.append({
+            "timestamp": result["timestamp"],
+            "consensus": result["consensus"],
+            "agents": [{"id": a["id"], "name": a["name"], "vote": a["vote"],
+                        "confidence": a["confidence"]} for a in result["agents"]],
+        })
+    return {"mode": "historical_replay", "predictive": False, "symbol": candles[-1].symbol,
+            "windows": len(rows), "agents": [a["name"] for a in AGENTS], "rows": rows}
