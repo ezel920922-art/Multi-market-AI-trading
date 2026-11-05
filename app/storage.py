@@ -96,7 +96,7 @@ class PostgresStore:
             output.append(item)
         return output
 
-    def close_order(self, order_id: str, exit_price: float) -> dict[str, Any] | None:
+    def close_order(self, order_id: str, exit_price: float, risk_config) -> dict[str, Any] | None:
         day = datetime.now(timezone.utc).date()
         with self.connect() as conn:
             with conn.transaction():
@@ -122,7 +122,7 @@ class PostgresStore:
                 daily_pnl = (float(risk_state["daily_realized_pnl"]) if same_day else 0.0) + pnl
                 current_equity = max(0.0, float(risk_state["current_equity"]) + pnl)
                 daily_start = float(risk_state["daily_start_equity"]) if same_day else float(risk_state["current_equity"])
-                loss_limit = float(risk_state["starting_equity"]) * 0.015
+                loss_limit = float(risk_state["starting_equity"]) * float(risk_config.daily_loss_limit_pct)
                 halted = daily_pnl <= -loss_limit
                 open_risk = max(0.0, float(risk_state["open_risk_pct"]) - float(row["risk_amount"]) / float(risk_state["starting_equity"]))
                 result_json = dict(row["result_json"] or {})

@@ -1,6 +1,7 @@
 import hmac
 import os
 import json
+import logging
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
@@ -14,6 +15,8 @@ from app.engine import TradingEngine
 from dataclasses import replace
 from app.risk import RiskRejected
 from app.storage import DuplicateOrderKey, OpenXauusdPosition, DurableRiskRejected, PostgresStore
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Multi-Market Trading Agency", version="0.2.0",
               description="Paper-only API. No real broker execution is available.",
@@ -202,12 +205,21 @@ def submit_paper_order(payload: SubmitSignalRequest):
                 # Reconcile local risk state when the configured store exposes snapshots.
                 # Lightweight test doubles may implement persistence without this read API.
                 if hasattr(store, "load_risk_state"):
-                    state = store.load_risk_state()
-                    if state:
-                        engine.risk.restore_persisted_state(
-                            realized_pnl=float(state["daily_realized_pnl"]),
-                            open_risk=float(state["open_risk_pct"]) * engine.risk.config.initial_equity,
-                            halted=bool(state["trading_halted"]), trading_day=state["trading_day"],
+                    try:
+                        state = store.load_risk_state()
+                        if state:
+                            engine.risk.restore_persisted_state(
+                                realized_pnl=float(state["daily_realized_pnl"]),
+                                open_risk=float(state["open_risk_pct"]) * engine.risk.config.initial_equity,
+                                halted=bool(state["trading_halted"]), trading_day=state["trading_day"],
+                            )
+                    except Exception:
+                        # The durable transaction has committed. Returning an error here
+                        # could cause a client retry and duplicate an already-created order.
+                        # Keep the in-process reservation and let the DB gate remain canonical.
+                        logger.warning(
+                            "Paper order persisted; local risk snapshot refresh failed",
+                            exc_info=True,
                         )
             return result.model_dump(mode="json")
         except RiskRejected as exc:
@@ -231,7 +243,7 @@ def close_paper_order(order_id: str, payload: ClosePaperTradeRequest):
         raise HTTPException(status_code=503, detail="Durable database persistence is required to close paper trades")
     with order_submission_lock:
         try:
-            result = store.close_order(order_id, payload.exit_price)
+            result = store.close_order(order_id, payload.exit_price, engine.risk.config)
             if result is None:
                 raise HTTPException(status_code=404, detail="Paper trade not found")
             state = result["risk_state"]

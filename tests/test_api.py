@@ -55,6 +55,48 @@ def test_paper_order_endpoint(monkeypatch):
     assert body["status"] == "paper_filled"
     assert body["order_id"].startswith("PAPER-")
 
+def test_paper_order_returns_success_if_post_commit_snapshot_read_fails(monkeypatch):
+    from app import main
+    from app.engine import TradingEngine
+
+    class CommittedStore:
+        def has_order_key(self, key):
+            return False
+
+        def persist_order(self, request, result, risk_config):
+            self.persisted_order_id = result.order_id
+
+        def load_risk_state(self):
+            raise RuntimeError("temporary read failure after commit")
+
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setattr(main, "engine", TradingEngine())
+    store = CommittedStore()
+    monkeypatch.setattr(main, "store", store)
+    monkeypatch.setattr(main, "database_ready", True)
+
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {
+            "strategy_id": "post-commit-refresh-test",
+            "market": "equities",
+            "symbol": "TEST",
+            "side": "buy",
+            "entry": 100,
+            "stop_loss": 99,
+            "take_profit": 102,
+            "confidence": 0.9,
+        },
+        "quantity": 1,
+        "risk_amount": 25,
+        "idempotency_key": "post-commit-refresh-001",
+    })
+
+    assert response.status_code == 200
+    assert store.persisted_order_id == response.json()["order_id"]
+    assert main.engine.risk.status["open_risk"] == 25
+    assert "post-commit-refresh-001" in main.engine.risk._seen_keys
+
+
 def test_paper_order_releases_reserved_risk_when_persistence_fails(monkeypatch):
     from app import main
     from app.engine import TradingEngine
