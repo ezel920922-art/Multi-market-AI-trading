@@ -2,6 +2,22 @@
 
 The service is intentionally paper-only. The dashboard currently provides official documentation links and an integration-status view; broker execution adapters are **not connected**.
 
+## Twelve Data read-only market candles
+
+The AI Swarm Desk can request OHLCV candles through the server-side Twelve Data adapter. This is a market-data integration only; it cannot route orders.
+
+1. Create a Twelve Data account and review its symbol coverage, API credits, latency, redistribution rights, and plan limits: https://twelvedata.com/.
+2. Add `TWELVEDATA_API_KEY` as a secret environment variable in the existing Render service. Never put it in browser code, GitHub, or a request body.
+3. Redeploy the service and check `GET /api/market/status`; it reports only whether the key is configured.
+4. In `/desk`, enter the existing `TRADING_API_KEY` in Risk Monitor, select a supported market/symbol/interval, and fetch candles. The app calls authenticated `GET /api/market/candles` and fills the analysis input.
+5. If the provider rejects a symbol or plan, use a symbol listed by Twelve Data for your subscription. The adapter does not fabricate fallback prices.
+
+The adapter currently supports `1min`, `5min`, `15min`, `30min`, `1h`, `4h`, and `1day`, requests UTC timestamps, validates OHLC relationships and freshness, and caches identical requests for 15 seconds. Provider access and symbol coverage depend on the user's Twelve Data plan. The UI still labels order book depth, broker execution, and real-time exchange depth as disconnected until a separate supported integration is built.
+
+## AI Swarm Desk agents and Kelly sizing
+
+The `/desk` route shows the six rule-based analysis roles: Prior (EMA trend), Edge (momentum), Spotter (market structure), Taker (volume participation), Closer (volatility filter), and Kelly (data/risk veto). These are deterministic rules, not autonomous LLM agents. `POST /api/risk/kelly-size` provides a fractional-Kelly position-size estimate using user-supplied win rate and average win/loss ratio. It caps risk at 0.5% of equity per trade, returns zero size for a non-positive estimated edge, and never submits an order. Estimates are only as reliable as the historical statistics supplied by the user.
+
 ## Current capabilities
 - Protected paper-order endpoint: `POST /paper/orders` using `X-API-Key`.
 - Risk status endpoint: `GET /risk/status`.
@@ -34,6 +50,10 @@ Treat these as research tools, not signals or promises of returns. Use time-awar
 3. Redeploy and verify `GET /api/integrations` reports `newsapi.configured: true`.
 4. Open the dashboard news section. The key stays on the server and is sent to NewsAPI in the `X-Api-Key` request header, not exposed to browser JavaScript or included in the query URL.
 5. Review NewsAPI plan, geographic coverage, rate limits, caching, and redistribution terms before production use.
+
+## EMA backtesting endpoint
+
+The desk can run an authenticated historical EMA 8/21 crossover simulation at POST /api/backtest/ema using a supplied OHLCV array (30–500 candles). Entries occur at the next candle open to avoid same-bar look-ahead; spread, slippage, and fees are explicit parameters; when stop and target are both touched in one candle, the stop is assumed first. Risk is capped at 0.5% per trade and a 1.5% initial-equity daily loss halt is applied to realized simulated results. This is an initial research engine, not a validated strategy: walk-forward/out-of-sample analysis, full market-specific sessions, funding/financing, and richer fill models remain roadmap work. The endpoint never submits orders.
 
 ## Broker and platform integration roadmap
 - **MetaTrader 5**: its Python package communicates with a locally installed MT5 terminal. A cloud-only Render service cannot attach to a user's desktop terminal without a separately secured bridge running on that device. Start with read-only market data and demo accounts.

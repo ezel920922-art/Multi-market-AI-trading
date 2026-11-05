@@ -79,3 +79,25 @@ def test_rejects_non_finite_signal_prices():
 def test_risk_config_rejects_unsafe_values(kwargs):
     with pytest.raises(ValueError):
         RiskConfig(**kwargs)
+
+
+def test_default_minimum_confidence_enforces_a_grade_only():
+    from app.risk import RiskConfig
+    assert RiskConfig().min_confidence == 0.80
+
+
+def test_rejects_risk_above_remaining_daily_loss_capacity():
+    risk = RiskManager(RiskConfig())
+    risk.record_realized_pnl(-140)
+    with pytest.raises(RiskRejected, match="remaining daily loss capacity"):
+        risk.approve(signal(), 20, "daily-capacity-too-large")
+    risk.approve(signal(), 10, "daily-capacity-exact")
+    assert risk.status["open_risk"] == 10.0
+
+
+def test_open_risk_also_consumes_daily_loss_capacity():
+    risk = RiskManager(RiskConfig())
+    risk.approve(signal(), 50, "daily-capacity-first")
+    risk.record_realized_pnl(-100)
+    with pytest.raises(RiskRejected, match="remaining daily loss capacity"):
+        risk.approve(signal(), 10, "daily-capacity-second")

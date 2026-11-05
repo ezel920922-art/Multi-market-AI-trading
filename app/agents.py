@@ -1,19 +1,19 @@
 """Six-agent, rule-based market analysis. No broker execution or synthetic prices."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from datetime import timedelta
 from math import isfinite
 from statistics import mean
 from app.market_data import Candle, validate_candle_series
 
 
 AGENTS = [
-    {"id":"nova","name":"NOVA","role":"Trend & EMA structure","method":"EMA 8 / EMA 21"},
-    {"id":"orion","name":"ORION","role":"Momentum confirmation","method":"5-candle price momentum"},
-    {"id":"vesk","name":"VESK","role":"Market structure","method":"20-candle breakout"},
-    {"id":"luma","name":"LUMA","role":"Volume participation","method":"Recent vs baseline volume"},
-    {"id":"kira","name":"KIRA","role":"Volatility & mean reversion","method":"Range / volatility filter"},
-    {"id":"dash","name":"DASH","role":"Risk supervisor","method":"Data quality & exposure veto"},
+    {"id":"prior","name":"PRIOR","role":"Trend context","method":"EMA 8 / EMA 21"},
+    {"id":"edge","name":"EDGE","role":"Statistical momentum edge","method":"5-candle price momentum"},
+    {"id":"spotter","name":"SPOTTER","role":"Market structure scanner","method":"20-candle breakout"},
+    {"id":"taker","name":"TAKER","role":"Volume participation","method":"Recent vs baseline volume"},
+    {"id":"closer","name":"CLOSER","role":"Volatility exit filter","method":"Range / volatility filter"},
+    {"id":"kelly","name":"KELLY","role":"Risk budget supervisor","method":"Data quality & exposure veto; position sizing is separate"},
 ]
 
 
@@ -29,9 +29,19 @@ def _vote(direction: str, confidence: float, reason: str) -> dict:
     return {"vote": direction, "confidence": round(max(0.0, min(1.0, confidence)), 3), "reason": reason}
 
 
-def analyze_market(candles: list[Candle]) -> dict:
-    """Analyze a supplied, validated OHLCV series; never invent prices."""
-    quality = validate_candle_series(candles, max_staleness_seconds=300)
+def interval_freshness_seconds(interval: str) -> int:
+    """Maximum acceptable age for the latest candle, with a weekend allowance for daily bars."""
+    limits = {"1min": 300, "5min": 900, "15min": 1800, "30min": 3600,
+              "1h": 7200, "4h": 18000, "1day": 345600}
+    if interval not in limits:
+        raise ValueError("Unsupported candle interval")
+    return limits[interval]
+
+
+def analyze_market(candles: list[Candle], *, interval: str = "1min", validation_now=None) -> dict:
+    """Analyze supplied OHLCV; freshness is tied to the selected candle interval."""
+    quality = validate_candle_series(candles, now=validation_now,
+                                     max_staleness_seconds=interval_freshness_seconds(interval))
     if len(candles) < 30:
         raise ValueError("At least 30 recent candles are required for six-agent analysis")
     closes = [float(c.close) for c in candles]
@@ -97,3 +107,31 @@ def analyze_market(candles: list[Candle]) -> dict:
         "agents":[dict(AGENTS[i], **votes[i]) for i in range(6)],
         "disclaimer":"تحليل قواعدي لبيانات OHLCV المقدمة فقط؛ ليس توصية مالية ولا يرسل أوامر.",
     }
+
+
+def analyze_historical_spectrogram(candles: list[Candle], max_windows: int = 24, *, interval: str = "1min") -> dict:
+    """Replay rolling historical windows to produce a non-predictive agent vote matrix."""
+    if len(candles) < 30:
+        raise ValueError("At least 30 candles are required for historical signal analysis")
+    if not 1 <= max_windows <= 48:
+        raise ValueError("max_windows must be between 1 and 48")
+    # Validate the complete sequence once, using its own end timestamp.
+    from app.market_data import validate_candle_series
+    validate_candle_series(candles, now=candles[-1].timestamp + timedelta(seconds=1), max_staleness_seconds=2)
+    step = max(1, (len(candles) - 30) // max(1, max_windows - 1))
+    ends = list(range(30, len(candles) + 1, step))
+    if ends[-1] != len(candles):
+        ends.append(len(candles))
+    ends = ends[-max_windows:]
+    rows = []
+    for end in ends:
+        window = candles[max(0, end - 60):end]
+        result = analyze_market(window, interval=interval, validation_now=window[-1].timestamp + timedelta(seconds=1))
+        rows.append({
+            "timestamp": result["timestamp"],
+            "consensus": result["consensus"],
+            "agents": [{"id": a["id"], "name": a["name"], "vote": a["vote"],
+                        "confidence": a["confidence"]} for a in result["agents"]],
+        })
+    return {"mode": "historical_replay", "predictive": False, "symbol": candles[-1].symbol,
+            "windows": len(rows), "agents": [a["name"] for a in AGENTS], "rows": rows}

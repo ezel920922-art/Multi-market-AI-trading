@@ -1,0 +1,15 @@
+{
+  "appId": "com.ezel.multimarkettrading",
+  "appName": "AI Trading Agency",
+  "webDir": "mobile/www",
+  "server": {
+    "url": "https://multi-market-ai-trading.onrender.com/desk",
+    "cleartext": false,
+    "allowNavigation": [
+      "multi-market-ai-trading.onrender.com"
+    ]
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
