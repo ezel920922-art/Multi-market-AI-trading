@@ -33,7 +33,7 @@
 </head>
 <body>
 <div class="shell">
-<header class="topbar"><div class="brand"><div class="logo">M</div><div><h1>MULTI-MARKET <span class="yellow">AI</span></h1><p>Trading Intelligence · Risk-First Terminal</p></div></div><div class="top-actions"><div class="pill"><span class="dot"></span> PAPER MODE ONLY</div><button class="btn" id="refreshTop">↻ تحديث البيانات</button></div></header>
+<header class="topbar"><div class="brand"><div class="logo">M</div><div><h1>MULTI-MARKET <span class="yellow">AI</span></h1><p>Trading Intelligence · Risk-First Terminal</p></div></div><div class="top-actions"><div class="pill"><span class="dot"></span> PAPER MODE ONLY</div><button class="btn" id="logoutButton" type="button">تسجيل الخروج</button><button class="btn" id="refreshTop">↻ تحديث البيانات</button></div></header>
 <section class="hero"><div><div class="eyebrow">CONTROL CENTER / 01</div><h2>لوحة <span class="yellow">التداول الذكي</span></h2><p>راقب حالة النظام والمخاطر، واختبر إشارات التداول في بيئة تجريبية فقط.</p></div><div class="safe">⚠ <strong>وضع آمن</strong><br>لا يتم إرسال أوامر إلى وسيط حقيقي. هذه الواجهة مخصصة لاختبار API والتداول الورقي فقط.</div></section>
 <section class="grid">
 <div class="card"><div class="metric-head"><span>حالة الخدمة</span><span class="metric-icon">◉</span></div><div class="metric-value" id="serviceMetric">جارٍ الفحص</div><div class="metric-foot" id="serviceFoot">التحقق من /health</div></div>
@@ -229,6 +229,18 @@ refreshHealth();
   finally{btn.disabled=false;btn.textContent='تشغيل تحليل الوكلاء الستة';}
  });
  await loadAgents();
+})();
+</script>
+
+<script>
+(()=>{
+ const key=sessionStorage.getItem('tradingApiKey');
+ if(!key){location.replace('/login');return;}
+ const field=document.getElementById('apiKey');
+ if(field){field.value=key;}
+ const logout=document.getElementById('logoutButton');
+ if(logout) logout.addEventListener('click',()=>{sessionStorage.removeItem('tradingApiKey');location.replace('/login');});
+ window.addEventListener('DOMContentLoaded',()=>{if(typeof loadRisk==='function')loadRisk();});
 })();
 </script>
 </body></html>
