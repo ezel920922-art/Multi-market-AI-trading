@@ -57,6 +57,91 @@ class PostgresStore:
             ).fetchone()
             return row is not None
 
+    def has_open_xauusd(self, side: str) -> bool:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM public.paper_orders WHERE upper(symbol) = 'XAUUSD' AND status = 'filled' LIMIT 1"
+            ).fetchone()
+            return row is not None
+
+    def list_orders(self, status: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            if status in {"open", "filled"}:
+                rows = conn.execute(
+                    "SELECT * FROM public.paper_orders WHERE status = 'filled' ORDER BY created_at DESC LIMIT %s",
+                    (limit,),
+                ).fetchall()
+            elif status in {"closed"}:
+                rows = conn.execute(
+                    "SELECT * FROM public.paper_orders WHERE status = 'closed' ORDER BY updated_at DESC LIMIT %s",
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM public.paper_orders ORDER BY created_at DESC LIMIT %s", (limit,)
+                ).fetchall()
+        output = []
+        for row in rows:
+            item = dict(row)
+            item["request_json"] = item.get("request_json") or {}
+            item["result_json"] = item.get("result_json") or {}
+            output.append(item)
+        return output
+
+    def close_order(self, order_id: str, exit_price: float) -> dict[str, Any] | None:
+        day = datetime.now(timezone.utc).date()
+        with self.connect() as conn:
+            with conn.transaction():
+                row = conn.execute(
+                    "SELECT * FROM public.paper_orders WHERE result_json->>'order_id' = %s FOR UPDATE",
+                    (order_id,),
+                ).fetchone()
+                if not row:
+                    return None
+                if row["status"] != "filled":
+                    raise ValueError("Paper trade is not open")
+                entry = float(row["entry_price"])
+                qty = float(row["quantity"])
+                pnl = (float(exit_price) - entry) * qty
+                if row["side"] == "sell":
+                    pnl = -pnl
+                risk_state = conn.execute(
+                    "SELECT * FROM public.risk_state WHERE id = 1 FOR UPDATE"
+                ).fetchone()
+                if not risk_state:
+                    raise RuntimeError("Risk state is not initialized")
+                same_day = risk_state["trading_day"] == day
+                daily_pnl = (float(risk_state["daily_realized_pnl"]) if same_day else 0.0) + pnl
+                current_equity = max(0.0, float(risk_state["current_equity"]) + pnl)
+                daily_start = float(risk_state["daily_start_equity"]) if same_day else float(risk_state["current_equity"])
+                loss_limit = float(risk_state["starting_equity"]) * 0.015
+                halted = daily_pnl <= -loss_limit
+                open_risk = max(0.0, float(risk_state["open_risk_pct"]) - float(row["risk_amount"]) / float(risk_state["starting_equity"]))
+                result_json = dict(row["result_json"] or {})
+                result_json.update({"exit_price": float(exit_price), "realized_pnl": round(pnl, 8),
+                                    "closed_at": datetime.now(timezone.utc).isoformat(), "close_reason": "manual_close"})
+                conn.execute(
+                    "UPDATE public.paper_orders SET status='closed', result_json=%s::jsonb, updated_at=now() WHERE id=%s",
+                    (json.dumps(result_json), row["id"]),
+                )
+                conn.execute(
+                    """UPDATE public.risk_state SET current_equity=%s, daily_start_equity=%s,
+                       daily_realized_pnl=%s, trading_day=%s, trading_halted=%s,
+                       halt_reason=CASE WHEN %s THEN 'daily_loss_limit' ELSE NULL END,
+                       open_risk_pct=%s, version=version+1, updated_at=now() WHERE id=1""",
+                    (current_equity, daily_start, daily_pnl, day, halted, halted, open_risk),
+                )
+                conn.execute(
+                    """INSERT INTO public.risk_events(event_type,reason,equity,daily_realized_pnl,open_risk_pct,metadata)
+                       VALUES ('paper_trade_closed','manual simulated close',%s,%s,%s,%s::jsonb)""",
+                    (current_equity, daily_pnl, open_risk,
+                     json.dumps({"order_id": order_id, "symbol": row["symbol"], "exit_price": exit_price, "pnl": pnl})),
+                )
+                state = conn.execute("SELECT daily_realized_pnl, open_risk_pct, trading_halted, trading_day FROM public.risk_state WHERE id=1").fetchone()
+        return {"order_id": order_id, "status": "closed", "exit_price": float(exit_price),
+                "realized_pnl": round(pnl, 2), "current_equity": round(current_equity, 2),
+                "risk_state": dict(state)}
+
     def persist_order(self, request, result, risk_status: dict):
         signal = request.signal
         request_json = request.model_dump(mode="json")
@@ -89,7 +174,7 @@ class PostgresStore:
                     conn.execute(
                         """
                         UPDATE public.risk_state
-                           SET current_equity = GREATEST(0, starting_equity + %s),
+                           SET daily_start_equity = CASE WHEN trading_day <> %s THEN current_equity ELSE daily_start_equity END,
                                daily_realized_pnl = %s,
                                trading_day = %s,
                                trading_halted = %s,
@@ -99,7 +184,7 @@ class PostgresStore:
                                updated_at = now()
                          WHERE id = 1
                         """,
-                        (realized, realized, day, halted, halted, open_risk_pct),
+                        (day, realized, day, halted, halted, open_risk_pct),
                     )
                     conn.execute(
                         """

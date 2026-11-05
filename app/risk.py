@@ -10,7 +10,7 @@ class RiskConfig:
     risk_per_trade_pct: float = 0.005
     daily_loss_limit_pct: float = 0.015
     max_open_risk_pct: float = 0.02
-    min_confidence: float = 0.60
+    min_confidence: float = 0.80
     min_stop_distance_pct: float = 0.0005
     max_stop_distance_pct: float = 0.10
 

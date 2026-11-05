@@ -544,3 +544,58 @@ def test_agent_spectrogram_rejects_missing_api_key(monkeypatch):
     monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
     response=client.post('/api/agents/spectrogram',json={'candles':[]})
     assert response.status_code==401
+
+
+def test_paper_trade_history_endpoint_uses_durable_store(monkeypatch):
+    from app import main
+    class FakeStore:
+        def list_orders(self, status=None, limit=100):
+            return [{"id": 7, "symbol": "EURUSD", "status": "filled"}]
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setattr(main, "store", FakeStore())
+    monkeypatch.setattr(main, "database_ready", True)
+    response = client.get("/paper/orders?status=open", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["mode"] == "paper_only"
+    assert response.json()["orders"][0]["status"] == "filled"
+
+
+def test_paper_trade_close_endpoint_updates_risk_state(monkeypatch):
+    from datetime import date
+    from app import main
+    from app.engine import TradingEngine
+    class FakeStore:
+        def close_order(self, order_id, exit_price):
+            return {"order_id": order_id, "status": "closed", "exit_price": exit_price,
+                    "realized_pnl": 12.5, "current_equity": 10012.5,
+                    "risk_state": {"daily_realized_pnl": 12.5, "open_risk_pct": 0.0,
+                                   "trading_halted": False, "trading_day": date.today()}}
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setattr(main, "store", FakeStore())
+    monkeypatch.setattr(main, "database_ready", True)
+    monkeypatch.setattr(main, "engine", TradingEngine())
+    response = client.post("/paper/orders/PAPER-abc/close", headers=auth_headers(), json={"exit_price": 101.25})
+    assert response.status_code == 200
+    assert response.json()["realized_pnl"] == 12.5
+    assert response.json()["status"] == "closed"
+    assert main.engine.risk.status["realized_pnl"] == 12.5
+
+
+def test_xauusd_new_position_blocked_when_one_is_already_open(monkeypatch):
+    from app import main
+    from app.engine import TradingEngine
+    class FakeStore:
+        def has_order_key(self, key): return False
+        def has_open_xauusd(self, side): return True
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setattr(main, "store", FakeStore())
+    monkeypatch.setattr(main, "database_ready", True)
+    monkeypatch.setattr(main, "engine", TradingEngine())
+    response = client.post("/paper/orders", headers=auth_headers(), json={
+        "signal": {"strategy_id":"gold-test", "market":"commodities", "symbol":"XAUUSD",
+                   "side":"sell", "entry":2000, "stop_loss":2010, "take_profit":1980,
+                   "confidence":0.95},
+        "quantity":1, "risk_amount":25, "idempotency_key":"xauusd-open-guard-001"
+    })
+    assert response.status_code == 409
+    assert "XAUUSD" in response.json()["detail"]

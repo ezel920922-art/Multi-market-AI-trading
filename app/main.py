@@ -54,6 +54,10 @@ class SubmitSignalRequest(BaseModel):
     risk_amount: float = Field(gt=0, allow_inf_nan=False)
     idempotency_key: str = Field(min_length=8, max_length=120)
 
+class ClosePaperTradeRequest(BaseModel):
+    exit_price: float = Field(gt=0, allow_inf_nan=False)
+
+
 class SetupAnalysisRequest(BaseModel):
     market: MarketType
     symbol: str = Field(min_length=1, max_length=40)
@@ -153,6 +157,14 @@ def submit_paper_order(payload: SubmitSignalRequest):
                 raise
             except Exception as exc:
                 raise HTTPException(status_code=503, detail="Could not verify order idempotency") from exc
+        if store is not None and payload.signal.symbol.strip().upper() == "XAUUSD":
+            try:
+                if store.has_open_xauusd(payload.signal.side.value):
+                    raise HTTPException(status_code=409, detail="An XAUUSD paper position is already open; opposite, grid, and averaging entries are blocked")
+            except HTTPException:
+                raise
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail="Could not verify existing XAUUSD exposure") from exc
         try:
             result = engine.submit_signal(payload.signal, payload.quantity, payload.risk_amount,
                                           payload.idempotency_key)
@@ -174,6 +186,41 @@ def submit_paper_order(payload: SubmitSignalRequest):
             return result.model_dump(mode="json")
         except RiskRejected as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/paper/orders", dependencies=[Depends(require_api_key)])
+def list_paper_orders(status: str | None = Query(default=None), limit: int = Query(default=100, ge=1, le=250)):
+    if store is None or not database_ready:
+        raise HTTPException(status_code=503, detail="Durable database persistence is required for trade history")
+    try:
+        rows = store.list_orders(status=status, limit=limit)
+        return {"mode": "paper_only", "count": len(rows), "orders": rows}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Could not load paper trade history") from exc
+
+
+@app.post("/paper/orders/{order_id}/close", dependencies=[Depends(require_api_key)])
+def close_paper_order(order_id: str, payload: ClosePaperTradeRequest):
+    if store is None or not database_ready:
+        raise HTTPException(status_code=503, detail="Durable database persistence is required to close paper trades")
+    with order_submission_lock:
+        try:
+            result = store.close_order(order_id, payload.exit_price)
+            if result is None:
+                raise HTTPException(status_code=404, detail="Paper trade not found")
+            state = result["risk_state"]
+            engine.risk.restore_persisted_state(
+                realized_pnl=float(state["daily_realized_pnl"]),
+                open_risk=float(state["open_risk_pct"]) * engine.risk.config.initial_equity,
+                halted=bool(state["trading_halted"]), trading_day=state["trading_day"],
+            )
+            return {key: value for key, value in result.items() if key != "risk_state"}
+        except HTTPException:
+            raise
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Could not close paper trade safely") from exc
 
 
 @app.post("/api/analysis/setup", dependencies=[Depends(require_api_key)])
