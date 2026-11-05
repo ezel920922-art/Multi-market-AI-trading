@@ -482,8 +482,14 @@ def pwa_service_worker():
 
 @app.get("/static/icons/{icon_name}", include_in_schema=False)
 def pwa_icon(icon_name: str):
-    allowed = {"icon.svg", "icon-192.svg", "icon-512.svg"}
-    if icon_name not in allowed:
+    # Resolve request values only through fixed, trusted paths. Never append
+    # user-controlled input to a filesystem path (prevents path traversal).
+    icon_files = {
+        "icon.svg": Path(__file__).parent / "static" / "icons" / "icon.svg",
+        "icon-192.svg": Path(__file__).parent / "static" / "icons" / "icon-192.svg",
+        "icon-512.svg": Path(__file__).parent / "static" / "icons" / "icon-512.svg",
+    }
+    icon_file = icon_files.get(icon_name)
+    if icon_file is None:
         raise HTTPException(status_code=404, detail="Icon not found")
-    f = Path(__file__).parent / "static" / "icons" / icon_name
-    return Response(content=f.read_text(encoding="utf-8"), media_type="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})
+    return Response(content=icon_file.read_text(encoding="utf-8"), media_type="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})
