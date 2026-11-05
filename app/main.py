@@ -469,3 +469,21 @@ def swarm_desk():
     """Render the AI Swarm Desk preview without replacing the existing dashboard."""
     desk_file = Path(__file__).with_name("swarm_desk.html")
     return HTMLResponse(content=desk_file.read_text(encoding="utf-8"))
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def pwa_manifest():
+    f = Path(__file__).with_name("manifest.webmanifest")
+    return Response(content=f.read_text(encoding="utf-8"), media_type="application/manifest+json", headers={"Cache-Control":"no-cache"})
+
+@app.get("/service-worker.js", include_in_schema=False)
+def pwa_service_worker():
+    f = Path(__file__).with_name("service-worker.js")
+    return Response(content=f.read_text(encoding="utf-8"), media_type="application/javascript", headers={"Cache-Control":"no-cache","Service-Worker-Allowed":"/"})
+
+@app.get("/static/icons/{icon_name}", include_in_schema=False)
+def pwa_icon(icon_name: str):
+    allowed = {"icon.svg", "icon-192.svg", "icon-512.svg"}
+    if icon_name not in allowed:
+        raise HTTPException(status_code=404, detail="Icon not found")
+    f = Path(__file__).parent / "static" / "icons" / icon_name
+    return Response(content=f.read_text(encoding="utf-8"), media_type="image/svg+xml", headers={"Cache-Control":"public, max-age=86400"})

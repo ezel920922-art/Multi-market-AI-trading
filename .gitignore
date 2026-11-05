@@ -4,3 +4,6 @@ __pycache__/
 .env
 *.db
 logs/
+node_modules/
+android/
+.gradle/

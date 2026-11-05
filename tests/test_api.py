@@ -704,3 +704,34 @@ def test_xauusd_punctuation_alias_is_blocked_when_position_is_open(monkeypatch):
     })
     assert response.status_code == 409
     assert "XAUUSD" in response.json()["detail"]
+
+
+def test_pwa_manifest_and_service_worker_are_served():
+    manifest = client.get("/manifest.webmanifest")
+    assert manifest.status_code == 200
+    assert manifest.headers["content-type"].startswith("application/manifest+json")
+    data = manifest.json()
+    assert data["start_url"] == "/desk"
+    assert data["display"] == "standalone"
+    worker = client.get("/service-worker.js")
+    assert worker.status_code == 200
+    assert "Service-Worker-Allowed" in worker.headers
+    assert "u.pathname.startsWith('/api/')" in worker.text
+
+
+def test_pwa_icons_are_served_from_allowlist():
+    icon = client.get("/static/icons/icon-192.svg")
+    assert icon.status_code == 200
+    assert icon.headers["content-type"].startswith("image/svg+xml")
+    assert "<svg" in icon.text
+    assert client.get("/static/icons/not-an-icon.svg").status_code == 404
+
+
+def test_swarm_desk_has_mobile_navigation_and_paper_only_controls():
+    response = client.get("/desk")
+    assert response.status_code == 200
+    for anchor in ('id="overview"', 'id="swarm"', 'id="market"', 'id="paperTrading"'):
+        assert anchor in response.text
+    assert 'class="mobile-nav"' in response.text
+    assert "PAPER ONLY" in response.text
+    assert "EXECUTION" in response.text
