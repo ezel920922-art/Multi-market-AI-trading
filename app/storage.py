@@ -20,6 +20,11 @@ class DurableRiskRejected(Exception):
     """The database-authoritative risk gate rejected a paper order."""
 
 
+def _is_xauusd_symbol(symbol: str) -> bool:
+    """Treat punctuation variants such as XAU/USD and XAU-USD as the same instrument."""
+    return "".join(char for char in symbol.upper() if char.isalnum()) == "XAUUSD"
+
+
 class PostgresStore:
     def __init__(self, database_url: str):
         if not database_url:
