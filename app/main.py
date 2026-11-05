@@ -459,6 +459,12 @@ def market_news():
         })
     return {"provider": "NewsAPI", "count": len(articles), "articles": articles}
 
+@app.get("/login", response_class=HTMLResponse, include_in_schema=False)
+def user_login():
+    """Render the browser access screen; credentials are validated by the protected risk endpoint."""
+    login_file = Path(__file__).with_name("login.html")
+    return HTMLResponse(content=login_file.read_text(encoding="utf-8"), headers={"Cache-Control": "no-store"})
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def dashboard():
     dashboard_file = Path(__file__).with_name("dashboard.html")
