@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 from app.models import Signal, OrderRequest, MarketType, Side
 from app.engine import TradingEngine
+from app.astra_sim import AstraSimulation
 from app.risk import RiskRejected
 from app.storage import DuplicateOrderKey, PostgresStore
 
@@ -18,6 +19,8 @@ app = FastAPI(title="Multi-Market Trading Agency", version="0.2.0",
               description="Paper-only API. No real broker execution is available.",
               docs_url=None, redoc_url=None, openapi_url=None)
 engine = TradingEngine()
+# ASTRA: synthetic-market simulation with its own RiskManager; never touches `engine` or any broker.
+astra = AstraSimulation()
 store = PostgresStore.from_env()
 database_ready = False
 # Serialize the full in-process risk-reserve + durable-write sequence.
@@ -224,6 +227,18 @@ def market_news():
             "description": item.get("description"),
         })
     return {"provider": "NewsAPI", "count": len(articles), "articles": articles}
+
+@app.get("/api/astra/state")
+def astra_state():
+    """Public, read-only snapshot of the SIMULATED six-agent session (synthetic prices)."""
+    astra.advance()
+    return astra.state()
+
+
+@app.get("/astra", response_class=HTMLResponse, include_in_schema=False)
+def astra_dashboard():
+    return HTMLResponse(content=Path(__file__).with_name("astra.html").read_text(encoding="utf-8"))
+
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def dashboard():

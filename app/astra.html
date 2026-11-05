@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ASTRA Vortex Terminal</title>
+<style>
+:root{--bg:#eef3f8;--panel:#fbfdff;--line:#c9d6e4;--ink:#12263a;--muted:#5c7088;--accent:#2a6fdb;--up:#1aa37a;--down:#d6455d;--warn:#b8860b;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+:root:not([data-theme="light"]){}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0c1622;--panel:#122033;--line:#27405c;--ink:#e4eef9;--muted:#8ca3bd;--accent:#6aa4ff;--up:#35d0a0;--down:#ff6b84;--warn:#e0b84a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;padding-bottom:12px;border-bottom:1px solid var(--line)}
+h1{margin:0;font:600 20px var(--mono);letter-spacing:.08em}h1 small{font-weight:400;color:var(--muted);font-size:12px;letter-spacing:0;margin-inline-start:8px}
+.badge{font:600 11px var(--mono);letter-spacing:.1em;border:1px solid var(--warn);color:var(--warn);padding:3px 8px;border-radius:99px}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:14px 0}
+.kpi,.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.kpi{padding:10px 14px}.kpi .l{font:11px var(--mono);letter-spacing:.08em;color:var(--muted);text-transform:uppercase}.kpi .v{font:600 24px var(--mono);margin-top:4px}
+.kpi .s{font:11px var(--mono);color:var(--muted)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.panel{padding:12px;min-width:0}.panel h2{margin:0 0 8px;font:600 11px var(--mono);letter-spacing:.1em;color:var(--muted);text-transform:uppercase}
+canvas{width:100%;display:block}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px}
+.stream{font:12px var(--mono);list-style:none;margin:0;padding:0;max-height:150px;overflow:hidden}
+.stream li{display:grid;grid-template-columns:44px 52px 1fr auto;gap:6px;padding:3px 0;border-bottom:1px dashed var(--line)}
+.up{color:var(--up)}.down{color:var(--down)}.mut{color:var(--muted)}
+.ledger{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:12px}
+.agent{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--c);border-radius:10px;padding:10px;text-align:center}
+.agent.on{box-shadow:0 0 0 2px var(--c) inset}
+.dot{width:38px;height:38px;border-radius:50%;margin:0 auto 6px;border:3px solid var(--c);background:radial-gradient(circle at 50% 50%,var(--c) 0 28%,transparent 30%)}
+.agent b{font:600 15px var(--mono);color:var(--c)}.agent .r{font-size:11px;color:var(--muted);min-height:16px}
+.agent .p{font:600 18px var(--mono);margin:6px 0 2px}.agent .m{font:11px var(--mono);color:var(--muted)}
+.route{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;font:11px var(--mono);color:var(--muted)}
+.route span{padding:2px 8px;border-radius:6px;border:1px solid var(--line)}.route .on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.vwrap{position:relative}.vmeta{position:absolute;inset-inline-start:8px;bottom:8px;font:11px var(--mono);color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+footer{margin-top:14px;font-size:12px;color:var(--muted)}
+@media (max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.grid,.row3{grid-template-columns:1fr}.ledger{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>ASTRA <small>/ VORTEX TERMINAL · SIX AGENTS, ONE SHARED BOOK</small></h1>
+  <div><span class="badge">SIMULATION · PAPER ONLY</span> <span class="mut" id="clock" style="font:12px var(--mono);margin-inline-start:8px"></span></div>
+</header>
+<section class="kpis" aria-label="Session summary">
+  <div class="kpi"><div class="l">Balance</div><div class="v" id="k-bal">–</div><div class="s" id="k-bal-s"></div></div>
+  <div class="kpi"><div class="l">Combined P&amp;L</div><div class="v" id="k-pnl">–</div><div class="s">after fees &amp; slippage</div></div>
+  <div class="kpi"><div class="l">Win rate</div><div class="v" id="k-win">–</div><div class="s" id="k-win-s"></div></div>
+  <div class="kpi"><div class="l">Signals evaluated</div><div class="v" id="k-sig">–</div><div class="s" id="k-sig-s"></div></div>
+  <div class="kpi"><div class="l">Active agents</div><div class="v" id="k-act">–</div><div class="s" id="k-act-s"></div></div>
+</section>
+<section class="grid">
+  <div class="panel"><h2>01 · The Vortex</h2><div class="vwrap"><canvas id="vortex" height="320" aria-label="Animated vortex driven by volatility and agent agreement"></canvas><div class="vmeta" id="vmeta"></div></div></div>
+  <div class="panel"><h2>02 · <span id="sym">BTC/USD</span> · synthetic · 15-min bars</h2><div style="font:600 24px var(--mono)" id="price">–</div><canvas id="candles" height="290"></canvas></div>
+</section>
+<section class="row3">
+  <div class="panel"><h2>03 · Combined profit</h2><canvas id="eq" height="110"></canvas></div>
+  <div class="panel"><h2>04 · Hesitation trace <span class="mut">(1 − strongest signal)</span></h2><canvas id="hes" height="110"></canvas></div>
+  <div class="panel"><h2>05 · Execution stream</h2><ul class="stream" id="stream"></ul></div>
+</section>
+<section class="ledger" id="ledger" aria-label="Agent ledger"></section>
+<div class="route" id="route"></div>
+<footer id="disc">Synthetic prices. Paper only. Not a trade recommendation and not evidence of live performance.</footer>
+</div>
+<script>
+(function(){
+"use strict";
+var S=null,reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var css=function(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()};
+var $=function(id){return document.getElementById(id)};
+var fmt=function(n,d){return n==null?"–":Number(n).toLocaleString("en-US",{minimumFractionDigits:d||0,maximumFractionDigits:d||0})};
+var sgn=function(n,d){return (n>=0?"+":"−")+"$"+fmt(Math.abs(n),d||0)};
+function fit(c){var r=window.devicePixelRatio||1,w=c.clientWidth,h=+c.getAttribute("height");if(c.width!==w*r||c.height!==h*r){c.width=w*r;c.height=h*r}var x=c.getContext("2d");x.setTransform(r,0,0,r,0,0);return{x:x,w:w,h:h}}
+function line(c,data,color,fill){var o=fit(c),x=o.x;x.clearRect(0,0,o.w,o.h);if(!data||data.length<2)return;var mn=Math.min.apply(0,data),mx=Math.max.apply(0,data);if(mx===mn){mx+=1;mn-=1}
+ var P=function(i,v){return[i/(data.length-1)*o.w,o.h-4-(v-mn)/(mx-mn)*(o.h-8)]};x.beginPath();data.forEach(function(v,i){var p=P(i,v);i?x.lineTo(p[0],p[1]):x.moveTo(p[0],p[1])});x.strokeStyle=color;x.lineWidth=1.6;x.stroke();
+ if(fill){x.lineTo(o.w,o.h);x.lineTo(0,o.h);x.closePath();x.globalAlpha=.12;x.fillStyle=color;x.fill();x.globalAlpha=1}}
+function candles(c,cs){var o=fit(c),x=o.x;x.clearRect(0,0,o.w,o.h);if(!cs.length)return;var vh=40,ph=o.h-vh-8,mn=1e18,mx=0,vm=0;cs.forEach(function(k){mn=Math.min(mn,k.l);mx=Math.max(mx,k.h);vm=Math.max(vm,k.v)});
+ var pad=(mx-mn)*.06;mn-=pad;mx+=pad;var w=o.w/cs.length,Y=function(v){return 4+(mx-v)/(mx-mn)*ph};var up=css("--up"),dn=css("--down");
+ x.strokeStyle=css("--line");x.lineWidth=1;for(var g=0;g<4;g++){var gy=4+g*ph/3;x.beginPath();x.moveTo(0,gy);x.lineTo(o.w,gy);x.stroke();x.fillStyle=css("--muted");x.font="10px ui-monospace,monospace";x.fillText(fmt(mx-(mx-mn)*g/3),4,gy+11)}
+ cs.forEach(function(k,i){var col=k.c>=k.o?up:dn,cx=i*w+w/2;x.strokeStyle=col;x.fillStyle=col;x.beginPath();x.moveTo(cx,Y(k.h));x.lineTo(cx,Y(k.l));x.stroke();var t=Y(Math.max(k.o,k.c)),b=Y(Math.min(k.o,k.c));x.fillRect(cx-w*.33,t,w*.66,Math.max(1,b-t));x.globalAlpha=.35;var vhh=k.v/vm*vh;x.fillRect(cx-w*.33,o.h-vhh,w*.66,vhh);x.globalAlpha=1})}
+var phase=0,last=0;
+function vortex(t){requestAnimationFrame(vortex);var c=$("vortex"),o=fit(c),x=o.x;x.clearRect(0,0,o.w,o.h);var v=S?S.vortex:{angular_velocity:2,axial_stretch:1,coherence:.5,vorticity:.3};
+ var dt=last?(t-last)/1000:0;last=t;if(!reduce)phase+=dt*v.angular_velocity;var cx=o.w/2,cy=o.h/2,H=o.h*.22*v.axial_stretch,R=Math.min(o.w,o.h)*.34,N=16,M=70,col=css("--accent");
+ x.lineWidth=1;for(var s=0;s<N;s++){x.beginPath();var th0=s/N*Math.PI*2;for(var i=0;i<=M;i++){var u=i/M,r=R*(.28+.72*Math.pow(Math.abs(2*u-1),1.3)),a=th0+u*(3+3*v.coherence)*Math.PI+phase,px=cx+r*Math.cos(a),pz=r*Math.sin(a),py=cy+(u-.5)*2*H+pz*.22;i?x.lineTo(px,py):x.moveTo(px,py)}
+  x.globalAlpha=.25+.5*(s%4)/3;x.strokeStyle=col;x.stroke()}x.globalAlpha=1}
+function render(){var d=S;if(!d)return;
+ $("k-bal").textContent="$"+fmt(d.balance,0);$("k-bal-s").textContent="initial $"+fmt(d.initial_equity,0);
+ var p=$("k-pnl");p.textContent=sgn(d.pnl,0);p.className="v "+(d.pnl>=0?"up":"down");$("k-pnl-s");
+ $("k-win").textContent=d.win_rate==null?"–":d.win_rate+"%";$("k-win-s").textContent=fmt(d.closed_trades)+" closed trades";
+ $("k-sig").textContent=fmt(d.signals_evaluated);$("k-sig-s").textContent=d.risk_blocked+" blocked by risk gate";
+ $("k-act").textContent=d.active_agents+" / 6";$("k-act-s").textContent=d.risk.halted?"HALTED: daily loss limit":"open risk $"+fmt(d.risk.open_risk,0)+" / $"+fmt(d.risk.max_open_risk_limit,0);
+ $("clock").textContent="sim tick "+d.tick+" · day "+(d.sim_days+1)+" · regime "+d.regime;$("sym").textContent=d.symbol;$("disc").textContent=d.disclaimer;
+ var pr=$("price");pr.textContent=fmt(d.price,2)+"  "+(d.change_pct>=0?"+":"")+d.change_pct+"%";pr.className=d.change_pct>=0?"up":"down";
+ $("vmeta").textContent="ω "+d.vortex.angular_velocity+" rad/s · stretch "+d.vortex.axial_stretch+"× · coherence "+Math.round(d.vortex.coherence*100)+"% · vorticity "+d.vortex.vorticity;
+ candles($("candles"),d.candles);line($("eq"),d.equity_curve,css("--accent"),true);line($("hes"),d.hesitation,css("--muted"),false);
+ var ul=$("stream");ul.textContent="";d.stream.forEach(function(e){var li=document.createElement("li");var a=document.createElement("span");a.className="mut";a.textContent="#"+e.tick;var b=document.createElement("b");b.textContent=e.agent;var k=document.createElement("span");k.textContent=e.kind+(e.note&&e.pnl==null?" · "+e.note:"");var q=document.createElement("span");if(e.pnl!=null){q.textContent=sgn(e.pnl,2);q.className=e.pnl>=0?"up":"down"}li.append(a,b,k,q);ul.append(li)});
+ var L=$("ledger");L.textContent="";var R=$("route");R.textContent="";
+ d.agents.forEach(function(a){var el=document.createElement("div");el.className="agent"+(a.key===d.active_route?" on":"");el.style.setProperty("--c",a.color);
+  var dot=document.createElement("div");dot.className="dot";var n=document.createElement("b");n.textContent=a.name;var r=document.createElement("div");r.className="r";r.textContent=a.role;
+  var pp=document.createElement("div");pp.className="p "+(a.pnl>=0?"up":"down");pp.textContent=sgn(a.pnl,0);var m=document.createElement("div");m.className="m";m.textContent=a.trades+" trades · "+(a.win_rate==null?"–":a.win_rate+"%")+(a.position?" · "+a.position:"");
+  var cv=document.createElement("canvas");cv.setAttribute("height","44");el.append(dot,n,r,pp,m,cv);L.append(el);line(cv,a.history,a.color,true);
+  var s=document.createElement("span");s.textContent=a.name;if(a.key===d.active_route)s.className="on";R.append(s)})}
+function poll(){fetch("/api/astra/state",{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(d){S=d;render()}).catch(function(){$("clock").textContent="connection lost, retrying…"})}
+window.addEventListener("resize",render);poll();setInterval(poll,1000);requestAnimationFrame(vortex);
+})();
+</script>
+</body>
+</html>

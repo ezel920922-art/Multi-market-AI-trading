@@ -19,6 +19,8 @@ python -m uvicorn app.main:app --reload
 - `GET /health` — حالة الخدمة ونمط التنفيذ.
 - `GET /risk/status` — حالة إدارة المخاطر.
 - `POST /paper/orders` — إرسال أمر تجريبي إلى PaperBroker فقط.
+- `GET /api/astra/state` — حالة محاكاة الوكلاء الستة (أسعار تركيبية، قراءة فقط).
+- `GET /astra` — لوحة ASTRA المرئية للمحاكاة.
 
 ## الاختبارات
 ```bash
