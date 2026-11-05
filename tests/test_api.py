@@ -402,3 +402,85 @@ def test_existing_dashboard_remains_available():
     response = client.get('/')
     assert response.status_code == 200
     assert 'MULTI-MARKET' in response.text
+
+
+def test_market_provider_status_does_not_expose_api_key(monkeypatch):
+    monkeypatch.setenv("TWELVEDATA_API_KEY", "private-market-secret")
+    response = client.get("/api/market/status")
+    assert response.status_code == 200
+    assert response.json()["configured"] is True
+    assert response.json()["order_routing"] is False
+    assert "private-market-secret" not in response.text
+
+
+def test_market_candles_requires_api_key(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.get("/api/market/candles?market=forex&symbol=EUR/USD")
+    assert response.status_code == 401
+
+
+def test_market_candles_returns_provider_data_without_execution(monkeypatch):
+    from app import main
+    from datetime import datetime, timedelta, timezone
+    from app.market_data import Candle
+    from app.models import MarketType
+    now = datetime.now(timezone.utc)
+    candles = [Candle(market=MarketType.commodities, symbol="XAUUSD",
+        timestamp=now-timedelta(minutes=34-i), open=2000+i, high=2001+i,
+        low=1999+i, close=2000.5+i, volume=1000+i) for i in range(35)]
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setattr(main, "fetch_candles", lambda *args: candles)
+    response = client.get("/api/market/candles?market=commodities&symbol=XAUUSD", headers=auth_headers())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["provider"] == "Twelve Data"
+    assert body["mode"] == "read_only"
+    assert body["count"] == 35
+    assert body["candles"][0]["symbol"] == "XAUUSD"
+
+
+def test_market_candles_fail_closed_without_provider_key(monkeypatch):
+    from app import main
+    from app.market_provider import MarketProviderError
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    monkeypatch.setattr(main, "fetch_candles", lambda *args: (_ for _ in ()).throw(MarketProviderError("TWELVEDATA_API_KEY is not configured")))
+    response = client.get("/api/market/candles?market=forex&symbol=EUR/USD", headers=auth_headers())
+    assert response.status_code == 503
+    assert "not configured" in response.json()["detail"]
+
+
+def test_kelly_sizing_caps_risk_and_never_places_order(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/api/risk/kelly-size", headers=auth_headers(), json={
+        "symbol": "xauusd", "side": "buy", "entry": 2000, "stop_loss": 1990,
+        "equity": 10000, "win_rate": 0.65, "average_win_loss_ratio": 2.0,
+        "kelly_fraction": 0.5
+    })
+    assert response.status_code == 200
+    body = response.json()
+    assert body["mode"] == "analysis_only"
+    assert body["order_placed"] is False
+    assert body["execution_enabled"] is False
+    assert body["risk_pct"] <= 0.5
+    assert body["risk_budget"] <= 50
+    assert body["suggested_quantity"] >= 0
+
+
+def test_kelly_sizing_returns_zero_when_estimated_edge_is_negative(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/api/risk/kelly-size", headers=auth_headers(), json={
+        "symbol": "EURUSD", "side": "buy", "entry": 1.1, "stop_loss": 1.099,
+        "equity": 10000, "win_rate": 0.3, "average_win_loss_ratio": 1.0
+    })
+    assert response.status_code == 200
+    assert response.json()["trade_allowed_by_kelly"] is False
+    assert response.json()["suggested_quantity"] == 0
+
+
+def test_kelly_sizing_rejects_wrong_stop_direction(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post("/api/risk/kelly-size", headers=auth_headers(), json={
+        "symbol": "XAUUSD", "side": "buy", "entry": 2000, "stop_loss": 2001,
+        "equity": 10000, "win_rate": 0.6, "average_win_loss_ratio": 2.0
+    })
+    assert response.status_code == 422
