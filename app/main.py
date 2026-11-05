@@ -252,3 +252,9 @@ def market_news():
 def dashboard():
     dashboard_file = Path(__file__).with_name("dashboard.html")
     return HTMLResponse(content=dashboard_file.read_text(encoding="utf-8"))
+
+@app.get("/desk", response_class=HTMLResponse, include_in_schema=False)
+def swarm_desk():
+    """Render the AI Swarm Desk preview without replacing the existing dashboard."""
+    desk_file = Path(__file__).with_name("swarm_desk.html")
+    return HTMLResponse(content=desk_file.read_text(encoding="utf-8"))
