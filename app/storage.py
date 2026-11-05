@@ -191,6 +191,9 @@ class PostgresStore:
                     next_open_risk_pct = open_risk_pct + requested_risk_pct
                     if next_open_risk_pct > float(risk_config.max_open_risk_pct) + 1e-9:
                         raise DurableRiskRejected("Aggregate open risk limit exceeded in durable state")
+                    remaining_daily_capacity_pct = max(0.0, daily_limit / equity + realized / equity - open_risk_pct)
+                    if requested_risk_pct > remaining_daily_capacity_pct + 1e-9:
+                        raise DurableRiskRejected("Risk exceeds remaining daily loss capacity in durable state")
                     # The row lock makes this check + insert atomic across concurrent instances.
                     if _is_xauusd_symbol(signal.symbol):
                         existing = conn.execute(
