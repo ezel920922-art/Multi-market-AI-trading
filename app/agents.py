@@ -29,9 +29,19 @@ def _vote(direction: str, confidence: float, reason: str) -> dict:
     return {"vote": direction, "confidence": round(max(0.0, min(1.0, confidence)), 3), "reason": reason}
 
 
-def analyze_market(candles: list[Candle], *, validation_now=None) -> dict:
-    """Analyze supplied OHLCV; validation_now is internal-only for historical replay."""
-    quality = validate_candle_series(candles, now=validation_now, max_staleness_seconds=300)
+def interval_freshness_seconds(interval: str) -> int:
+    """Maximum acceptable age for the latest candle, with a weekend allowance for daily bars."""
+    limits = {"1min": 300, "5min": 900, "15min": 1800, "30min": 3600,
+              "1h": 7200, "4h": 18000, "1day": 345600}
+    if interval not in limits:
+        raise ValueError("Unsupported candle interval")
+    return limits[interval]
+
+
+def analyze_market(candles: list[Candle], *, interval: str = "1min", validation_now=None) -> dict:
+    """Analyze supplied OHLCV; freshness is tied to the selected candle interval."""
+    quality = validate_candle_series(candles, now=validation_now,
+                                     max_staleness_seconds=interval_freshness_seconds(interval))
     if len(candles) < 30:
         raise ValueError("At least 30 recent candles are required for six-agent analysis")
     closes = [float(c.close) for c in candles]
@@ -99,7 +109,7 @@ def analyze_market(candles: list[Candle], *, validation_now=None) -> dict:
     }
 
 
-def analyze_historical_spectrogram(candles: list[Candle], max_windows: int = 24) -> dict:
+def analyze_historical_spectrogram(candles: list[Candle], max_windows: int = 24, *, interval: str = "1min") -> dict:
     """Replay rolling historical windows to produce a non-predictive agent vote matrix."""
     if len(candles) < 30:
         raise ValueError("At least 30 candles are required for historical signal analysis")
@@ -116,7 +126,7 @@ def analyze_historical_spectrogram(candles: list[Candle], max_windows: int = 24)
     rows = []
     for end in ends:
         window = candles[max(0, end - 60):end]
-        result = analyze_market(window, validation_now=window[-1].timestamp + timedelta(seconds=1))
+        result = analyze_market(window, interval=interval, validation_now=window[-1].timestamp + timedelta(seconds=1))
         rows.append({
             "timestamp": result["timestamp"],
             "consensus": result["consensus"],
