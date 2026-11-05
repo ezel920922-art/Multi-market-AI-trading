@@ -35,7 +35,7 @@ def _assert_isolated_test_branch():
     )
 
 
-def _new_order():
+def _new_order(prefix="pgtest-"):
     suffix = uuid.uuid4().hex
     signal = Signal(
         strategy_id="postgres-integration-test",
@@ -52,10 +52,10 @@ def _new_order():
         signal=signal,
         quantity=0.1,
         risk_amount=25.0,
-        idempotency_key=f"pgtest-{suffix}",
+        idempotency_key=f"{prefix}{suffix}",
     )
     result = OrderResult(
-        order_id=f"pgtest-{suffix}",
+        order_id=f"{prefix}{suffix}",
         status="filled",
         market=MarketType.commodities,
         symbol="XAUUSD",
@@ -65,6 +65,69 @@ def _new_order():
         message="Integration test only",
     )
     return request, result
+
+
+def _assert_insert_failure_rolls_back(store, config):
+    """Force the final event insert to fail after order/risk writes have run."""
+    request, result = _new_order(prefix="pgtest-rollback-")
+    trigger_name = "pgtest_force_event_failure"
+    function_name = "pgtest_raise_on_rollback_order"
+
+    # The trigger is confined to this disposable, branch-guarded test database
+    # and only rejects the unique order id generated for this rollback case.
+    with psycopg.connect(DATABASE_URL) as conn:
+        before = conn.execute(
+            "SELECT open_risk_pct, current_equity, daily_realized_pnl, version "
+            "FROM public.risk_state WHERE id = 1"
+        ).fetchone()
+        conn.execute(
+            f"""
+            CREATE OR REPLACE FUNCTION public.{function_name}()
+            RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.metadata->>'order_id' LIKE 'pgtest-rollback-%' THEN
+                    RAISE EXCEPTION 'intentional integration-test rollback';
+                END IF;
+                RETURN NEW;
+            END;
+            $$
+            """
+        )
+        conn.execute(
+            f"""
+            CREATE TRIGGER {trigger_name}
+            BEFORE INSERT ON public.risk_events
+            FOR EACH ROW EXECUTE FUNCTION public.{function_name}()
+            """
+        )
+
+    try:
+        with pytest.raises(psycopg.errors.RaiseException, match="intentional integration-test rollback"):
+            store.persist_order(request, result, config)
+
+        with psycopg.connect(DATABASE_URL) as conn:
+            after = conn.execute(
+                "SELECT open_risk_pct, current_equity, daily_realized_pnl, version "
+                "FROM public.risk_state WHERE id = 1"
+            ).fetchone()
+            order_count = conn.execute(
+                "SELECT count(*) FROM public.paper_orders WHERE client_order_id = %s",
+                (request.idempotency_key,),
+            ).fetchone()[0]
+            event_count = conn.execute(
+                "SELECT count(*) FROM public.risk_events WHERE metadata->>'order_id' = %s",
+                (result.order_id,),
+            ).fetchone()[0]
+
+        assert order_count == 0, "Order insert survived a failed transaction"
+        assert event_count == 0, "Risk event unexpectedly survived a failed transaction"
+        assert tuple(after) == tuple(before), (
+            f"Risk state changed despite transaction rollback: before={before}, after={after}"
+        )
+    finally:
+        with psycopg.connect(DATABASE_URL) as conn:
+            conn.execute(f"DROP TRIGGER IF EXISTS {trigger_name} ON public.risk_events")
+            conn.execute(f"DROP FUNCTION IF EXISTS public.{function_name}()")
 
 
 def test_postgres_atomic_risk_persistence_concurrency_close_and_rollback():
@@ -149,6 +212,8 @@ def test_postgres_atomic_risk_persistence_concurrency_close_and_rollback():
         assert abs(float(state[2]) - (float(baseline[2]) + 1.0)) < 1e-6
         assert order_count == 1
         assert event_count == 2
+
+        _assert_insert_failure_rolls_back(store, config)
     finally:
         # Never leave an open test position behind if an assertion fails.
         with psycopg.connect(DATABASE_URL) as conn:
