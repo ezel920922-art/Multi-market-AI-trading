@@ -607,7 +607,7 @@ def test_paper_trade_close_endpoint_updates_risk_state(monkeypatch):
     from app import main
     from app.engine import TradingEngine
     class FakeStore:
-        def close_order(self, order_id, exit_price):
+        def close_order(self, order_id, exit_price, risk_config):
             return {"order_id": order_id, "status": "closed", "exit_price": exit_price,
                     "realized_pnl": 12.5, "current_equity": 10012.5,
                     "risk_state": {"daily_realized_pnl": 12.5, "open_risk_pct": 0.0,
