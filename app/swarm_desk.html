@@ -145,6 +145,6 @@ utc();setInterval(utc,1000);loadHealth();loadAgents();loadProviderStatus();setIn
 if('serviceWorker' in navigator && location.protocol==='https:'){window.addEventListener('load',()=>navigator.serviceWorker.register('/service-worker.js').catch(()=>{}));}
 </script>
 <script>
-(()=>{if(!sessionStorage.getItem('tradingApiKey')){location.replace('/login');return;}const key=sessionStorage.getItem('tradingApiKey');const logout=document.createElement('button');logout.type='button';logout.textContent='تسجيل الخروج';logout.style.cssText='position:fixed;top:12px;left:12px;z-index:9999;padding:9px 13px;border:1px solid #6b4a2e;border-radius:9px;background:#3a2418;color:#d5c4ae;font-weight:700;cursor:pointer';logout.addEventListener('click',()=>{sessionStorage.removeItem('tradingApiKey');location.replace('/login')});document.body.appendChild(logout);})();
+(()=>{if(!sessionStorage.getItem('tradingApiKey')){location.replace('/login');return;}const key=sessionStorage.getItem('tradingApiKey');const apiKeyField=document.getElementById('apiKey');if(apiKeyField){apiKeyField.value=key;}const logout=document.createElement('button');logout.type='button';logout.textContent='تسجيل الخروج';logout.style.cssText='position:fixed;top:12px;left:12px;z-index:9999;padding:9px 13px;border:1px solid #6b4a2e;border-radius:9px;background:#3a2418;color:#d5c4ae;font-weight:700;cursor:pointer';logout.addEventListener('click',()=>{sessionStorage.removeItem('tradingApiKey');location.replace('/login')});document.body.appendChild(logout);})();
 </script>
 </body></html>
