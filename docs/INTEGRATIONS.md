@@ -51,6 +51,10 @@ Treat these as research tools, not signals or promises of returns. Use time-awar
 4. Open the dashboard news section. The key stays on the server and is sent to NewsAPI in the `X-Api-Key` request header, not exposed to browser JavaScript or included in the query URL.
 5. Review NewsAPI plan, geographic coverage, rate limits, caching, and redistribution terms before production use.
 
+## EMA backtesting endpoint
+
+The desk can run an authenticated historical EMA 8/21 crossover simulation at POST /api/backtest/ema using a supplied OHLCV array (30–500 candles). Entries occur at the next candle open to avoid same-bar look-ahead; spread, slippage, and fees are explicit parameters; when stop and target are both touched in one candle, the stop is assumed first. Risk is capped at 0.5% per trade and a 1.5% initial-equity daily loss halt is applied to realized simulated results. This is an initial research engine, not a validated strategy: walk-forward/out-of-sample analysis, full market-specific sessions, funding/financing, and richer fill models remain roadmap work. The endpoint never submits orders.
+
 ## Broker and platform integration roadmap
 - **MetaTrader 5**: its Python package communicates with a locally installed MT5 terminal. A cloud-only Render service cannot attach to a user's desktop terminal without a separately secured bridge running on that device. Start with read-only market data and demo accounts.
 - **Interactive Brokers**: use the official TWS API or Web API, with an authorized account and a running TWS/IB Gateway where applicable. Implement account/market-data scopes and paper account support first.
