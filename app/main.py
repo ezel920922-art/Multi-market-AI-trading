@@ -11,8 +11,9 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 from app.models import Signal, OrderRequest, MarketType, Side
 from app.engine import TradingEngine
+from dataclasses import replace
 from app.risk import RiskRejected
-from app.storage import DuplicateOrderKey, PostgresStore
+from app.storage import DuplicateOrderKey, OpenXauusdPosition, PostgresStore
 
 app = FastAPI(title="Multi-Market Trading Agency", version="0.2.0",
               description="Paper-only API. No real broker execution is available.",
@@ -115,9 +116,14 @@ def startup():
             store.initialize(engine.risk.config.initial_equity)
             state = store.load_risk_state()
             if state:
+                # Durable account equity is canonical; avoid restoring percentages against a process default.
+                stored_equity = float(state["starting_equity"])
+                if stored_equity <= 0:
+                    raise RuntimeError("Stored starting equity is invalid")
+                engine.risk.config = replace(engine.risk.config, initial_equity=stored_equity)
                 engine.risk.restore_persisted_state(
                     realized_pnl=float(state["daily_realized_pnl"]),
-                    open_risk=float(state["open_risk_pct"]) * engine.risk.config.initial_equity,
+                    open_risk=float(state["open_risk_pct"]) * stored_equity,
                     halted=bool(state["trading_halted"]),
                     trading_day=state["trading_day"],
                 )
@@ -174,9 +180,8 @@ def submit_paper_order(payload: SubmitSignalRequest):
                                        idempotency_key=payload.idempotency_key)
                 try:
                     store.persist_order(request, result, engine.risk.status)
-                except DuplicateOrderKey as exc:
-                    # The paper engine reserves risk before persistence. Undo that reservation
-                    # if the database rejects a duplicate key (including a concurrent race).
+                except (DuplicateOrderKey, OpenXauusdPosition) as exc:
+                    # Undo the in-memory reservation if durable validation rejects this order.
                     engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
                     raise HTTPException(status_code=409, detail=str(exc)) from exc
                 except Exception as exc:

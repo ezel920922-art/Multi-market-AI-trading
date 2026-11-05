@@ -12,6 +12,10 @@ class DuplicateOrderKey(Exception):
     """An idempotency key already exists in durable storage."""
 
 
+class OpenXauusdPosition(Exception):
+    """A concurrent or existing XAUUSD paper position blocks a new entry."""
+
+
 class PostgresStore:
     def __init__(self, database_url: str):
         if not database_url:
@@ -146,14 +150,29 @@ class PostgresStore:
         signal = request.signal
         request_json = request.model_dump(mode="json")
         result_json = result.model_dump(mode="json")
-        equity = float(os.getenv("TRADING_INITIAL_EQUITY", "10000"))
         day = datetime.now(timezone.utc).date()
         realized = float(risk_status["realized_pnl"])
-        open_risk_pct = float(risk_status["open_risk"]) / equity
         halted = bool(risk_status["halted"])
         with self.connect() as conn:
             try:
                 with conn.transaction():
+                    # Serialize durable risk writes across app instances using the singleton state row.
+                    risk_state = conn.execute(
+                        "SELECT starting_equity, current_equity FROM public.risk_state WHERE id = 1 FOR UPDATE"
+                    ).fetchone()
+                    if not risk_state:
+                        raise RuntimeError("Risk state is not initialized")
+                    equity = float(risk_state["starting_equity"])
+                    if equity <= 0:
+                        raise RuntimeError("Stored starting equity is invalid")
+                    open_risk_pct = float(risk_status["open_risk"]) / equity
+                    # The row lock makes this check + insert atomic across concurrent instances.
+                    if signal.symbol.strip().upper() == "XAUUSD":
+                        existing = conn.execute(
+                            "SELECT 1 FROM public.paper_orders WHERE upper(symbol) = 'XAUUSD' AND status = 'filled' LIMIT 1"
+                        ).fetchone()
+                        if existing:
+                            raise OpenXauusdPosition("An XAUUSD paper position is already open")
                     conn.execute(
                         """
                         INSERT INTO public.paper_orders
