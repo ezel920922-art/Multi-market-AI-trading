@@ -150,7 +150,7 @@ class PostgresStore:
                 "realized_pnl": round(pnl, 2), "current_equity": round(current_equity, 2),
                 "risk_state": dict(state)}
 
-    def persist_order(self, request, result, risk_status: dict, risk_config):
+    def persist_order(self, request, result, risk_config):
         signal = request.signal
         request_json = request.model_dump(mode="json")
         result_json = result.model_dump(mode="json")
@@ -181,7 +181,8 @@ class PostgresStore:
                     requested_risk_pct = float(request.risk_amount) / equity
                     if requested_risk_pct > float(risk_config.risk_per_trade_pct) + 1e-9:
                         raise DurableRiskRejected("Risk per trade exceeds the durable configured limit")
-                    open_risk_pct = float(risk_state["open_risk_pct"]) if same_day else 0.0
+                    # Open exposure survives UTC day rollover until its position is closed.
+                    open_risk_pct = float(risk_state["open_risk_pct"])
                     next_open_risk_pct = open_risk_pct + requested_risk_pct
                     if next_open_risk_pct > float(risk_config.max_open_risk_pct) + 1e-9:
                         raise DurableRiskRejected("Aggregate open risk limit exceeded in durable state")
@@ -233,7 +234,7 @@ class PostgresStore:
                                 %s, %s, %s, %s::jsonb)
                         """,
                         (
-                            max(0.0, float(risk_state["current_equity"]) + realized), realized, next_open_risk_pct,
+                            float(risk_state["current_equity"]), realized, next_open_risk_pct,
                             json.dumps({"symbol": signal.symbol, "market": signal.market.value,
                                         "side": signal.side.value, "order_id": result.order_id}),
                         ),

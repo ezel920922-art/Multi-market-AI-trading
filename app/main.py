@@ -179,7 +179,7 @@ def submit_paper_order(payload: SubmitSignalRequest):
                                        risk_amount=payload.risk_amount,
                                        idempotency_key=payload.idempotency_key)
                 try:
-                    store.persist_order(request, result, engine.risk.status, engine.risk.config)
+                    store.persist_order(request, result, engine.risk.config)
                 except (DuplicateOrderKey, OpenXauusdPosition, DurableRiskRejected) as exc:
                     # Undo the in-memory reservation if durable validation rejects this order.
                     engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
