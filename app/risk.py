@@ -140,9 +140,11 @@ class RiskManager:
             if self._open_risk + risk_amount > max_total_risk + 1e-9:
                 raise RiskRejected("Aggregate open risk limit exceeded")
             daily_limit = self.config.initial_equity * self.config.daily_loss_limit_pct
-            if self._realized_pnl <= -daily_limit:
-                self._halted = True
-                raise RiskRejected("Daily loss limit reached")
+            # Reserve remaining daily-loss capacity for both realized losses and
+            # the worst-case risk of positions already open (including overnight).
+            remaining_daily_capacity = max(0.0, daily_limit + self._realized_pnl - self._open_risk)
+            if risk_amount > remaining_daily_capacity + 1e-9:
+                raise RiskRejected("Risk exceeds remaining daily loss capacity")
             self._seen_keys.add(idempotency_key)
             self._open_risk += risk_amount
 
