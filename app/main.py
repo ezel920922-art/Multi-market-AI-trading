@@ -247,11 +247,19 @@ def close_paper_order(order_id: str, payload: ClosePaperTradeRequest):
             if result is None:
                 raise HTTPException(status_code=404, detail="Paper trade not found")
             state = result["risk_state"]
-            engine.risk.restore_persisted_state(
-                realized_pnl=float(state["daily_realized_pnl"]),
-                open_risk=float(state["open_risk_pct"]) * engine.risk.config.initial_equity,
-                halted=bool(state["trading_halted"]), trading_day=state["trading_day"],
-            )
+            try:
+                engine.risk.restore_persisted_state(
+                    realized_pnl=float(state["daily_realized_pnl"]),
+                    open_risk=float(state["open_risk_pct"]) * engine.risk.config.initial_equity,
+                    halted=bool(state["trading_halted"]), trading_day=state["trading_day"],
+                )
+            except Exception:
+                # The close transaction is already committed. Do not return an error
+                # that could prompt a retry of an already-closed paper trade.
+                logger.warning(
+                    "Paper trade closed; local risk snapshot refresh failed",
+                    exc_info=True,
+                )
             return {key: value for key, value in result.items() if key != "risk_state"}
         except HTTPException:
             raise

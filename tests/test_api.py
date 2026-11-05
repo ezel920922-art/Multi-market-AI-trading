@@ -623,6 +623,46 @@ def test_paper_trade_close_endpoint_updates_risk_state(monkeypatch):
     assert main.engine.risk.status["realized_pnl"] == 12.5
 
 
+def test_close_returns_success_if_post_commit_risk_restore_fails(monkeypatch):
+    from datetime import date
+    from app import main
+    from app.engine import TradingEngine
+
+    class CommittedCloseStore:
+        closed = False
+
+        def close_order(self, order_id, exit_price, risk_config):
+            self.closed = True
+            return {
+                "order_id": order_id, "status": "closed", "exit_price": exit_price,
+                "realized_pnl": 12.5, "current_equity": 10012.5,
+                "risk_state": {
+                    "daily_realized_pnl": 12.5, "open_risk_pct": 0.0,
+                    "trading_halted": False, "trading_day": date.today(),
+                },
+            }
+
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    store = CommittedCloseStore()
+    monkeypatch.setattr(main, "store", store)
+    monkeypatch.setattr(main, "database_ready", True)
+    engine = TradingEngine()
+    monkeypatch.setattr(main, "engine", engine)
+    monkeypatch.setattr(engine.risk, "restore_persisted_state",
+                        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("refresh failed")))
+
+    response = client.post(
+        "/paper/orders/PAPER-committed-close/close",
+        headers=auth_headers(),
+        json={"exit_price": 101.25},
+    )
+
+    assert response.status_code == 200
+    assert store.closed is True
+    assert response.json()["status"] == "closed"
+    assert response.json()["realized_pnl"] == 12.5
+
+
 def test_xauusd_new_position_blocked_when_one_is_already_open(monkeypatch):
     from app import main
     from app.engine import TradingEngine
