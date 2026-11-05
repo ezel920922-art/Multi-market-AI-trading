@@ -40,6 +40,12 @@ async def security_headers(request: Request, call_next):
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     return response
 
+from app.market_data import Candle
+from app.agents import AGENTS, analyze_market
+
+class AgentAnalysisRequest(BaseModel):
+    candles: list[Candle] = Field(min_length=1, max_length=500)
+
 class SubmitSignalRequest(BaseModel):
     signal: Signal
     quantity: float = Field(gt=0, allow_inf_nan=False)
@@ -178,6 +184,23 @@ def analyze_setup(payload: SetupAnalysisRequest):
         "suggested_quantity": round(risk_budget / risk_per_unit, 8),
         "assumptions": ["Before fees, slippage, funding, and contract-size multipliers", "Not a trade recommendation"],
     }
+@app.get("/api/agents/status")
+def agent_status():
+    """Static roster; agents remain idle until verified candles are supplied."""
+    return {"mode":"paper_only", "execution_enabled":False, "agent_count":len(AGENTS),
+            "agents":[{**agent, "status":"idle_waiting_for_verified_data"} for agent in AGENTS],
+            "shared_pool":{"status":"no_live_balance_connected","live_pnl_available":False},
+            "data_source":"user_supplied_ohlcv_only"}
+
+@app.post("/api/agents/analyze", dependencies=[Depends(require_api_key)])
+def agents_analyze(payload: AgentAnalysisRequest):
+    """Run six independent rule-based votes over real supplied candles. Never submits orders."""
+    try:
+        return analyze_market(payload.candles)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.get("/api/integrations")
 def integration_status():
     return {
