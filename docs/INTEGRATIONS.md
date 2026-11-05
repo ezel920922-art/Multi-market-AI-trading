@@ -2,6 +2,22 @@
 
 The service is intentionally paper-only. The dashboard currently provides official documentation links and an integration-status view; broker execution adapters are **not connected**.
 
+## Twelve Data read-only market candles
+
+The AI Swarm Desk can request OHLCV candles through the server-side Twelve Data adapter. This is a market-data integration only; it cannot route orders.
+
+1. Create a Twelve Data account and review its symbol coverage, API credits, latency, redistribution rights, and plan limits: https://twelvedata.com/.
+2. Add `TWELVEDATA_API_KEY` as a secret environment variable in the existing Render service. Never put it in browser code, GitHub, or a request body.
+3. Redeploy the service and check `GET /api/market/status`; it reports only whether the key is configured.
+4. In `/desk`, enter the existing `TRADING_API_KEY` in Risk Monitor, select a supported market/symbol/interval, and fetch candles. The app calls authenticated `GET /api/market/candles` and fills the analysis input.
+5. If the provider rejects a symbol or plan, use a symbol listed by Twelve Data for your subscription. The adapter does not fabricate fallback prices.
+
+The adapter currently supports `1min`, `5min`, `15min`, `30min`, `1h`, `4h`, and `1day`, requests UTC timestamps, validates OHLC relationships and freshness, and caches identical requests for 15 seconds. Provider access and symbol coverage depend on the user's Twelve Data plan. The UI still labels order book depth, broker execution, and real-time exchange depth as disconnected until a separate supported integration is built.
+
+## AI Swarm Desk agents and Kelly sizing
+
+The `/desk` route shows the six rule-based analysis roles: Prior (EMA trend), Edge (momentum), Spotter (market structure), Taker (volume participation), Closer (volatility filter), and Kelly (data/risk veto). These are deterministic rules, not autonomous LLM agents. `POST /api/risk/kelly-size` provides a fractional-Kelly position-size estimate using user-supplied win rate and average win/loss ratio. It caps risk at 0.5% of equity per trade, returns zero size for a non-positive estimated edge, and never submits an order. Estimates are only as reliable as the historical statistics supplied by the user.
+
 ## Current capabilities
 - Protected paper-order endpoint: `POST /paper/orders` using `X-API-Key`.
 - Risk status endpoint: `GET /risk/status`.
