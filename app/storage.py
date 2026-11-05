@@ -68,7 +68,7 @@ class PostgresStore:
     def has_open_xauusd(self, side: str) -> bool:
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT 1 FROM public.paper_orders WHERE upper(symbol) = 'XAUUSD' AND status = 'filled' LIMIT 1"
+                "SELECT 1 FROM public.paper_orders WHERE regexp_replace(upper(symbol), '[^A-Z0-9]', '', 'g') = 'XAUUSD' AND status = 'filled' LIMIT 1"
             ).fetchone()
             return row is not None
 
@@ -187,9 +187,9 @@ class PostgresStore:
                     if next_open_risk_pct > float(risk_config.max_open_risk_pct) + 1e-9:
                         raise DurableRiskRejected("Aggregate open risk limit exceeded in durable state")
                     # The row lock makes this check + insert atomic across concurrent instances.
-                    if signal.symbol.strip().upper() == "XAUUSD":
+                    if _is_xauusd_symbol(signal.symbol):
                         existing = conn.execute(
-                            "SELECT 1 FROM public.paper_orders WHERE upper(symbol) = 'XAUUSD' AND status = 'filled' LIMIT 1"
+                            "SELECT 1 FROM public.paper_orders WHERE regexp_replace(upper(symbol), '[^A-Z0-9]', '', 'g') = 'XAUUSD' AND status = 'filled' LIMIT 1"
                         ).fetchone()
                         if existing:
                             raise OpenXauusdPosition("An XAUUSD paper position is already open")
