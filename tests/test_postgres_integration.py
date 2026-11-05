@@ -12,7 +12,7 @@ import pytest
 
 from app.models import MarketType, OrderRequest, OrderResult, Side, Signal
 from app.risk import RiskConfig
-from app.storage import DuplicateOrderKey, OpenXauusdPosition, PostgresStore
+from app.storage import DuplicateOrderKey, OpenXauusdPosition, DurableRiskRejected, PostgresStore
 
 DATABASE_URL = os.getenv("TRADING_TEST_DATABASE_URL", "").strip()
 pytestmark = pytest.mark.skipif(
@@ -213,6 +213,30 @@ def test_postgres_atomic_risk_persistence_concurrency_close_and_rollback():
         assert abs(float(state[2]) - (float(baseline[2]) + 1.0)) < 1e-6
         assert order_count == 1
         assert event_count == 2
+
+        # Verify the durable gate reserves the remaining daily-loss budget.
+        # Restore the exact prior daily snapshot afterward so this disposable
+        # branch remains reusable by subsequent CI runs.
+        with psycopg.connect(DATABASE_URL) as conn:
+            prior_day = conn.execute(
+                "SELECT trading_day FROM public.risk_state WHERE id = 1"
+            ).fetchone()[0]
+            conn.execute(
+                "UPDATE public.risk_state SET trading_day=CURRENT_DATE, daily_realized_pnl=-140, "
+                "trading_halted=false, open_risk_pct=0 WHERE id=1"
+            )
+        capacity_request, capacity_result = _new_order(prefix="pgtest-daily-capacity-")
+        capacity_request.risk_amount = 20.0
+        try:
+            with pytest.raises(DurableRiskRejected, match="remaining daily loss capacity"):
+                store.persist_order(capacity_request, capacity_result, config)
+        finally:
+            with psycopg.connect(DATABASE_URL) as conn:
+                conn.execute(
+                    "UPDATE public.risk_state SET trading_day=%s, daily_realized_pnl=%s, "
+                    "trading_halted=false, open_risk_pct=0 WHERE id=1",
+                    (prior_day, float(baseline[2])),
+                )
 
         _assert_insert_failure_rolls_back(store, config)
     finally:
