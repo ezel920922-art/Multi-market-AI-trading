@@ -484,3 +484,38 @@ def test_kelly_sizing_rejects_wrong_stop_direction(monkeypatch):
         "equity": 10000, "win_rate": 0.6, "average_win_loss_ratio": 2.0
     })
     assert response.status_code == 422
+
+
+def test_ema_backtest_endpoint_is_authenticated_and_paper_only(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from math import sin
+    from app.market_data import Candle
+    from app.models import MarketType
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    rows = []
+    previous = 100.0
+    for i in range(100):
+        close = 100 + 0.025*i + 3.2*sin(i/7) + 0.7*sin(i/2.2)
+        rows.append(Candle(market=MarketType.equities, symbol="TEST",
+            timestamp=now-timedelta(minutes=99-i), open=previous,
+            high=max(previous,close)+0.6, low=min(previous,close)-0.6,
+            close=close, volume=1000+i))
+        previous=close
+    response = client.post('/api/backtest/ema', headers=auth_headers(), json={
+        'candles':[c.model_dump(mode='json') for c in rows]
+    })
+    assert response.status_code == 200
+    body=response.json()
+    assert body['mode']=='backtest_only'
+    assert body['execution_enabled'] is False
+    assert body['orders_submitted']==0
+    assert body['strategy']['entry_timing']=='next_candle_open'
+
+
+def test_ema_backtest_rejects_risk_above_cap(monkeypatch):
+    monkeypatch.setenv("TRADING_API_KEY", TEST_API_KEY)
+    response = client.post('/api/backtest/ema', headers=auth_headers(), json={
+        'candles':[], 'risk_pct':0.01
+    })
+    assert response.status_code == 422
