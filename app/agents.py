@@ -8,12 +8,12 @@ from app.market_data import Candle, validate_candle_series
 
 
 AGENTS = [
-    {"id":"nova","name":"NOVA","role":"Trend & EMA structure","method":"EMA 8 / EMA 21"},
-    {"id":"orion","name":"ORION","role":"Momentum confirmation","method":"5-candle price momentum"},
-    {"id":"vesk","name":"VESK","role":"Market structure","method":"20-candle breakout"},
-    {"id":"luma","name":"LUMA","role":"Volume participation","method":"Recent vs baseline volume"},
-    {"id":"kira","name":"KIRA","role":"Volatility & mean reversion","method":"Range / volatility filter"},
-    {"id":"dash","name":"DASH","role":"Risk supervisor","method":"Data quality & exposure veto"},
+    {"id":"prior","name":"PRIOR","role":"Trend context","method":"EMA 8 / EMA 21"},
+    {"id":"edge","name":"EDGE","role":"Statistical momentum edge","method":"5-candle price momentum"},
+    {"id":"spotter","name":"SPOTTER","role":"Market structure scanner","method":"20-candle breakout"},
+    {"id":"taker","name":"TAKER","role":"Volume participation","method":"Recent vs baseline volume"},
+    {"id":"closer","name":"CLOSER","role":"Volatility exit filter","method":"Range / volatility filter"},
+    {"id":"kelly","name":"KELLY","role":"Risk budget supervisor","method":"Data quality & exposure veto; position sizing is separate"},
 ]
 
 
