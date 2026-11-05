@@ -7,6 +7,24 @@
 <style>
 :root{color-scheme:dark;--bg:#090909;--panel:#111111;--panel2:#171717;--line:#292929;--yellow:#ffd21f;--yellow2:#f4b900;--text:#f5f5f5;--muted:#a1a1aa;--green:#42d392;--red:#ff6464}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 90% -15%,#332800 0,transparent 36%),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;min-height:100vh}button,input,select{font:inherit}button{cursor:pointer}.shell{max-width:1320px;margin:auto;padding:22px}.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:8px 0 24px;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:12px}.logo{width:46px;height:46px;display:grid;place-items:center;background:var(--yellow);color:#090909;border-radius:13px;font-weight:1000;font-size:22px;box-shadow:0 0 28px #ffd21f22}.brand h1{font-size:18px;letter-spacing:.3px;margin:0}.brand p{margin:4px 0 0;color:var(--muted);font-size:12px}.top-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.pill{border:1px solid #4a3d0b;background:#211b08;color:var(--yellow);padding:8px 12px;border-radius:99px;font-size:12px;display:flex;align-items:center;gap:7px}.dot{width:7px;height:7px;border-radius:50%;background:var(--yellow);display:inline-block}.btn{border:1px solid var(--line);background:#1a1a1a;color:var(--text);border-radius:10px;padding:10px 14px;font-weight:700}.btn:hover{border-color:var(--yellow)}.btn.primary{background:var(--yellow);color:#111;border-color:var(--yellow)}.hero{padding:26px 0 20px;display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.eyebrow{color:var(--yellow);font-size:11px;font-weight:800;letter-spacing:1.8px}.hero h2{font-size:clamp(25px,4vw,38px);margin:8px 0 7px;letter-spacing:-.8px}.hero p{margin:0;color:var(--muted);line-height:1.8;font-size:14px}.safe{border:1px solid #3b3213;border-radius:12px;padding:12px 15px;background:#161307;color:#e6d68c;font-size:12px;line-height:1.7;max-width:310px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:8px 0 18px}.card{background:linear-gradient(145deg,#141414,#0f0f0f);border:1px solid var(--line);border-radius:16px;padding:18px;min-width:0}.metric-head{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:12px}.metric-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:#26200b;color:var(--yellow);font-size:16px}.metric-value{font-size:25px;font-weight:800;margin:16px 0 5px;overflow-wrap:anywhere}.metric-foot{color:var(--muted);font-size:11px}.two{display:grid;grid-template-columns:1.2fr .8fr;gap:14px}.section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}.section-title h3{font-size:15px;margin:0}.sub{font-size:12px;color:var(--muted);margin-top:5px}.status{display:flex;gap:10px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:11px;background:#0b0b0b;margin:9px 0}.status .lamp{width:9px;height:9px;background:var(--muted);border-radius:50%;flex-shrink:0}.status.good .lamp{background:var(--green);box-shadow:0 0 10px #42d39266}.status.bad .lamp{background:var(--red)}.status strong{font-size:13px;display:block}.status small{color:var(--muted);font-size:11px}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:7px}.field.full{grid-column:1/-1}.field label{font-size:12px;color:#d4d4d8}.field input,.field select{width:100%;min-width:0;background:#090909;color:var(--text);border:1px solid #333;border-radius:9px;padding:11px;outline:none}.field input:focus,.field select:focus{border-color:var(--yellow)}.field input::placeholder{color:#696969}.form-actions{display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap}.notice{color:var(--muted);font-size:11px;line-height:1.8;margin-top:12px}.result{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line);background:#090909;border-radius:10px;padding:12px;margin-top:12px;color:#d4d4d8;font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;display:none}.keyrow{display:flex;gap:8px}.keyrow input{flex:1;min-width:0}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}td,th{text-align:right;padding:12px 10px;border-bottom:1px solid #242424;white-space:nowrap}th{color:var(--muted);font-weight:600}.empty{text-align:center;padding:26px;color:var(--muted)}.footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:#777;font-size:11px;padding:22px 0}.yellow{color:var(--yellow)}.toast{position:fixed;bottom:20px;left:20px;max-width:min(90vw,420px);background:#1a1a1a;border:1px solid #3c3312;border-radius:12px;padding:13px 16px;display:none;box-shadow:0 12px 35px #0009;font-size:13px}.toast.show{display:block}@media(max-width:850px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two{grid-template-columns:1fr}.hero{align-items:flex-start;flex-direction:column}.safe{max-width:none;width:100%}}@media(max-width:520px){.shell{padding:15px}.topbar{align-items:flex-start}.brand h1{font-size:15px}.logo{width:40px;height:40px}.top-actions{justify-content:flex-end}.top-actions .pill{display:none}.grid{gap:9px}.card{padding:13px;border-radius:13px}.metric-value{font-size:21px}.formgrid{grid-template-columns:1fr}.field.full{grid-column:auto}.hero h2{font-size:27px}}
+
+/* Six-agent terminal extension */
+.agent-panel{margin:18px 0;background:linear-gradient(145deg,#151515,#0b0b0b);border:1px solid #39300e;border-radius:18px;padding:20px}
+.agent-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}
+.agent-card{background:#0b0b0b;border:1px solid #2c2c2c;border-radius:12px;padding:14px;min-width:0}
+.agent-card .agent-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.agent-card strong{font-size:13px;letter-spacing:1px;color:var(--yellow)}
+.agent-card small{display:block;color:var(--muted);font-size:11px;margin-top:6px;line-height:1.6}
+.agent-state{font-size:10px;border:1px solid #393939;color:#aaa;padding:4px 7px;border-radius:20px}
+.agent-pool{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.agent-pool>div{background:#211b08;border:1px solid #463a10;border-radius:11px;padding:12px}
+.agent-pool b{display:block;color:var(--yellow);font-size:15px;margin-bottom:4px}
+.agent-pool span{font-size:11px;color:#b8b1a0}
+.agent-input{width:100%;min-height:150px;resize:vertical;background:#080808;color:#ddd;border:1px solid #393939;border-radius:10px;padding:12px;font:12px/1.6 ui-monospace,monospace;direction:ltr;text-align:left}
+.agent-result{display:none;margin-top:14px;padding:14px;border:1px solid #393939;border-radius:12px;background:#090909}
+.agent-result pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#ddd;font:12px/1.7 ui-monospace,monospace;direction:ltr;text-align:left}
+.agent-vote{display:inline-block;border:1px solid #3a3a3a;border-radius:8px;padding:4px 8px;margin:3px;font-size:11px}
+@media(max-width:700px){.agent-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.agent-pool{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -100,7 +118,41 @@ document.getElementById('newsRefresh')?.addEventListener('click',refreshNewsStat
 document.getElementById('copyChecklist')?.addEventListener('click',async()=>{const s=[...document.querySelectorAll('#toolChecklist label')].map(x=>(x.querySelector('input').checked?'[x] ':'[ ] ')+x.textContent.trim()).join('\n');try{await navigator.clipboard.writeText(s);toast('تم نسخ قائمة التجهيز')}catch(e){toast('تعذر النسخ في هذا المتصفح')}});
 </script>
 
-<div class="footer"><span>© Multi-Market AI · Black / Yellow Terminal</span><span>Secure by design · <span class="yellow">Paper trading only</span></span></div>
+
+<section class="agent-panel" id="vortexTerminal">
+  <div class="section-title">
+    <div><div class="eyebrow">ASTRA-INSPIRED / MULTI-AGENT CORE</div><h3>مركز الوكلاء الستة <span class="yellow">· VORTEX</span></h3><div class="sub">ستة أدوار مستقلة + بوابة مخاطر مركزية + سجل تصويت موحد</div></div>
+    <button class="btn" id="agentRefresh">↻ تحديث الوكلاء</button>
+  </div>
+  <div class="agent-pool">
+    <div><b id="agentCount">6</b><span>وكلاء متخصصون</span></div>
+    <div><b id="poolState">غير متصل</b><span>المحفظة الموحدة · لا يوجد رصيد حي مرتبط</span></div>
+    <div><b id="consensusState">بانتظار البيانات</b><span>قرار الإجماع · لا أوامر تلقائية</span></div>
+  </div>
+  <div class="agent-grid" id="agentCards">
+    <div class="agent-card"><div class="agent-top"><strong>NOVA</strong><span class="agent-state">جارٍ التحميل</span></div><small>Trend & EMA structure</small></div>
+    <div class="agent-card"><div class="agent-top"><strong>ORION</strong><span class="agent-state">جارٍ التحميل</span></div><small>Momentum confirmation</small></div>
+    <div class="agent-card"><div class="agent-top"><strong>VESK</strong><span class="agent-state">جارٍ التحميل</span></div><small>Market structure</small></div>
+    <div class="agent-card"><div class="agent-top"><strong>LUMA</strong><span class="agent-state">جارٍ التحميل</span></div><small>Volume participation</small></div>
+    <div class="agent-card"><div class="agent-top"><strong>KIRA</strong><span class="agent-state">جارٍ التحميل</span></div><small>Volatility & regime</small></div>
+    <div class="agent-card"><div class="agent-top"><strong>DASH</strong><span class="agent-state">جارٍ التحميل</span></div><small>Risk & data-quality veto</small></div>
+  </div>
+  <div class="two">
+    <div>
+      <div class="section-title"><div><h3>تحليل جماعي للسوق</h3><div class="sub">أدخل شموع OHLCV موثوقة؛ 30 شمعة على الأقل وبحد أقصى 500.</div></div></div>
+      <textarea class="agent-input" id="agentCandles" spellcheck="false" placeholder='[{"market":"commodities","symbol":"XAUUSD","timestamp":"2026-11-05T12:00:00Z","open":3980.0,"high":3985.0,"low":3977.0,"close":3983.0,"volume":1200}]'></textarea>
+      <div class="form-actions"><button class="btn primary" id="runAgents">تشغيل تحليل الوكلاء الستة</button><span class="notice">يلزم إدخال بيانات فعلية حديثة؛ لا توجد أسعار أو أرباح تجريبية مخترعة.</span></div>
+    </div>
+    <div>
+      <div class="section-title"><div><h3>منطق الإجماع</h3><div class="sub">لا يسمح بالإشارة دون موافقة بوابة المخاطر.</div></div></div>
+      <div class="status"><span class="lamp"></span><div><strong>3 أصوات اتجاهية على الأقل</strong><small>اتفاق أغلبية بين خمسة محللين</small></div></div>
+      <div class="status"><span class="lamp"></span><div><strong>الوكيل DASH يملك حق الرفض</strong><small>حداثة البيانات والتذبذب وجودة السلسلة</small></div></div>
+      <div class="status"><span class="lamp"></span><div><strong>تحليل فقط</strong><small>لا فتح صفقات ولا اتصال بوسيط من هذه الوحدة</small></div></div>
+    </div>
+  </div>
+  <div class="agent-result" id="agentResult"><div class="section-title"><h3 id="agentResultTitle">نتيجة التحليل</h3><span class="agent-state">ANALYSIS ONLY</span></div><pre id="agentResultBody"></pre></div>
+</section>
+\n<div class="footer"><span>© Multi-Market AI · Black / Yellow Terminal</span><span>Secure by design · <span class="yellow">Paper trading only</span></span></div>
 </div><div class="toast" id="toast"></div>
 <script>
 const $=id=>document.getElementById(id);let healthData=null;
@@ -112,4 +164,39 @@ $('refreshTop').addEventListener('click',refreshHealth);$('loadRisk').addEventLi
 $('orderForm').addEventListener('submit',async e=>{e.preventDefault();const key=$('apiKey').value.trim();if(!key){toast('أدخل مفتاح API أولاً');return}const side=$('side').value,entry=Number($('entry').value),stop=Number($('stop').value),target=$('target').value?Number($('target').value):null;if((side==='buy'&&stop>=entry)||(side==='sell'&&stop<=entry)){toast('تحقق من أن وقف الخسارة في الجهة الصحيحة من سعر الدخول');return}if(target!==null&&((side==='buy'&&target<=entry)||(side==='sell'&&target>=entry))){toast('تحقق من جهة سعر جني الأرباح');return}const button=$('orderForm').querySelector('[type=submit]');button.disabled=true;button.textContent='جارٍ الإرسال…';const payload={signal:{strategy_id:$('strategy').value,market:$('market').value,symbol:$('symbol').value,side,entry,stop_loss:stop,take_profit:target,confidence:Number($('confidence').value),rationale:$('rationale').value},quantity:Number($('quantity').value),risk_amount:Number($('riskAmount').value),idempotency_key:'ui-'+(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2))};try{const r=await fetch('/paper/orders',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':key},body:JSON.stringify(payload)});const d=await r.json();const out=$('orderResult');out.style.display='block';out.textContent='HTTP '+r.status+'\n'+JSON.stringify(d,null,2);toast(r.ok?'تمت معالجة الطلب الورقي':'رفض الخادم الطلب: '+(d.detail||r.status));if(r.ok)loadRisk()}catch(err){$('orderResult').style.display='block';$('orderResult').textContent='تعذر الاتصال بالخادم';toast('تعذر الاتصال بالخادم')}finally{button.disabled=false;button.textContent='إرسال أمر تجريبي'}});
 $('analysisForm').addEventListener('submit',async e=>{e.preventDefault();const key=$('apiKey').value.trim();if(!key){toast('أدخل مفتاح API أولاً');return}const out=$('analysisResult');out.style.display='block';out.textContent='جارٍ حساب المخاطرة والعائد…';const payload={market:$('analysisMarket').value,symbol:$('analysisSymbol').value,side:$('analysisSide').value,entry:Number($('analysisEntry').value),stop_loss:Number($('analysisStop').value),take_profit:Number($('analysisTarget').value),equity:Number($('analysisEquity').value),risk_pct:Number($('analysisRisk').value)};try{const r=await fetch('/api/analysis/setup',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':key},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){out.textContent='HTTP '+r.status+'\n'+(d.detail||'تعذر التحليل');toast('تعذر التحليل: '+(d.detail||r.status));return}out.textContent='نتيجة تحليل فقط — لم يتم إرسال أي أمر\n'+JSON.stringify({symbol:d.symbol,side:d.side,stop_distance_pct:d.stop_distance_pct+'%',risk_budget:d.risk_budget,risk_per_unit:d.risk_per_unit,reward_per_unit:d.reward_per_unit,reward_risk_ratio:d.reward_risk_ratio,suggested_quantity:d.suggested_quantity,assumptions:d.assumptions},null,2);toast('اكتمل حساب المخاطرة والعائد')}catch(err){out.textContent='تعذر الاتصال بالخادم';toast('تعذر الاتصال بالخادم')}});
 refreshHealth();
-</script></body></html>
+</script>
+<script>
+(async function(){
+ const byId=id=>document.getElementById(id);
+ async function loadAgents(){
+  try{
+   const r=await fetch('/api/agents/status',{cache:'no-store'}),d=await r.json();
+   byId('agentCount').textContent=d.agent_count||6;
+   byId('poolState').textContent=d.shared_pool?.status==='no_live_balance_connected'?'غير مربوط':'—';
+   byId('agentCards').innerHTML=(d.agents||[]).map(a=>'<div class="agent-card"><div class="agent-top"><strong>'+a.name+'</strong><span class="agent-state">بانتظار البيانات</span></div><small>'+a.role+'<br>'+a.method+'</small></div>').join('');
+  }catch(e){byId('poolState').textContent='تعذر الاتصال';}
+ }
+ byId('agentRefresh')?.addEventListener('click',loadAgents);
+ byId('runAgents')?.addEventListener('click',async()=>{
+  const key=byId('apiKey')?.value?.trim();
+  if(!key){toast('أدخل مفتاح API في قسم إعدادات الاتصال أولاً');return;}
+  let candles;
+  try{candles=JSON.parse(byId('agentCandles').value);if(!Array.isArray(candles))throw new Error('يجب إدخال مصفوفة JSON');}
+  catch(e){toast('صيغة JSON غير صحيحة: '+e.message);return;}
+  const btn=byId('runAgents');btn.disabled=true;btn.textContent='جارٍ التحليل…';
+  try{
+   const r=await fetch('/api/agents/analyze',{method:'POST',headers:{'Content-Type':'application/json','X-API-Key':key},body:JSON.stringify({candles}),cache:'no-store'});
+   const d=await r.json();byId('agentResult').style.display='block';
+   if(!r.ok){byId('agentResultTitle').textContent='تعذر التحليل';byId('agentResultBody').textContent=d.detail||('HTTP '+r.status);toast('رفض التحليل: '+(d.detail||r.status));return;}
+   byId('consensusState').textContent=d.consensus;
+   byId('agentResultTitle').textContent=d.symbol+' · '+d.consensus+' · ثقة '+Math.round(d.confidence*100)+'%';
+   byId('agentResultBody').textContent=JSON.stringify({symbol:d.symbol,latest_close:d.latest_close,timestamp:d.timestamp,regime:d.regime,atr_pct:d.atr_pct,consensus:d.consensus,confidence:d.confidence,vote_summary:d.vote_summary,agents:d.agents,disclaimer:d.disclaimer},null,2);
+   byId('agentCards').innerHTML=d.agents.map(a=>'<div class="agent-card"><div class="agent-top"><strong>'+a.name+'</strong><span class="agent-state">'+a.vote+'</span></div><small>'+a.role+'<br>'+a.reason+'<br>Confidence: '+Math.round(a.confidence*100)+'%</small></div>').join('');
+   toast('اكتمل تحليل الوكلاء الستة — لم يتم إرسال أي أمر');
+  }catch(e){toast('تعذر الاتصال بوحدة الوكلاء: '+e.message);}
+  finally{btn.disabled=false;btn.textContent='تشغيل تحليل الوكلاء الستة';}
+ });
+ await loadAgents();
+})();
+</script>
+</body></html>
