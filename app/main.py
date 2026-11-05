@@ -45,12 +45,13 @@ async def security_headers(request: Request, call_next):
     return response
 
 from app.market_data import Candle
-from app.agents import AGENTS, analyze_market, analyze_historical_spectrogram
+from app.agents import AGENTS, analyze_market, analyze_historical_spectrogram, interval_freshness_seconds
 from app.market_provider import fetch_candles, provider_status, MarketProviderError
 from app.backtest import run_ema_backtest
 
 class AgentAnalysisRequest(BaseModel):
     candles: list[Candle] = Field(min_length=1, max_length=500)
+    interval: str = Field(default="1min", pattern=r"^(1min|5min|15min|30min|1h|4h|1day)$")
 
 class SubmitSignalRequest(BaseModel):
     signal: Signal
@@ -366,7 +367,7 @@ def agent_status():
 def agents_analyze(payload: AgentAnalysisRequest):
     """Run six independent rule-based votes over real supplied candles. Never submits orders."""
     try:
-        return analyze_market(payload.candles)
+        return analyze_market(payload.candles, interval=payload.interval)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -375,7 +376,7 @@ def agents_analyze(payload: AgentAnalysisRequest):
 def agents_spectrogram(payload: AgentAnalysisRequest):
     """Replay historical OHLCV windows to render agent signals; no forward prediction."""
     try:
-        return analyze_historical_spectrogram(payload.candles)
+        return analyze_historical_spectrogram(payload.candles, interval=payload.interval)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
