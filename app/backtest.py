@@ -14,6 +14,13 @@ def _ema(values: list[float], period: int) -> list[float]:
     return out
 
 
+def _remaining_daily_risk_budget(equity: float, risk_pct: float, daily_pnl: dict[str, float], day: str,
+                               initial_equity: float, daily_loss_limit_pct: float = 0.015) -> float:
+    """Reserve only the remaining daily loss capacity before opening another position."""
+    remaining = initial_equity * daily_loss_limit_pct + daily_pnl.get(day, 0.0)
+    return max(0.0, min(equity * risk_pct, remaining))
+
+
 def run_ema_backtest(
     candles: list[Candle], *, fast_period: int = 8, slow_period: int = 21,
     initial_equity: float = 10_000, risk_pct: float = 0.005,
@@ -84,8 +91,18 @@ def run_ema_backtest(
         entry = entry_raw * (1 + side_cost_rate) if direction == "buy" else entry_raw * (1 - side_cost_rate)
         stop = entry_raw - distance if direction == "buy" else entry_raw + distance
         target = entry_raw + distance * reward_risk if direction == "buy" else entry_raw - distance * reward_risk
-        risk_budget = equity * risk_pct
-        quantity = risk_budget / distance
+        # Never allocate more than the remaining 1.5% daily loss capacity.
+        risk_budget = _remaining_daily_risk_budget(
+            equity, risk_pct, daily_pnl, day, initial_equity
+        )
+        if risk_budget <= 0:
+            halted_days.add(day)
+            i += 1
+            continue
+        # Include estimated entry + stop-exit spread/slippage/fees in per-unit risk.
+        stop_cost = (entry_raw + stop) * side_cost_rate
+        risk_per_unit = distance + stop_cost
+        quantity = risk_budget / risk_per_unit
         exit_index = len(candles) - 1
         exit_raw = float(candles[-1].close)
         reason = "end_of_data"
@@ -143,7 +160,7 @@ def run_ema_backtest(
         "market": candles[-1].market.value, "symbol": candles[-1].symbol,
         "period_start": candles[0].timestamp.isoformat(), "period_end": candles[-1].timestamp.isoformat(),
         "strategy": {"type": "EMA crossover", "fast_period": fast_period, "slow_period": slow_period,
-                      "risk_pct": risk_pct, "spread_bps": spread_bps, "slippage_bps": slippage_bps,
+                      "risk_pct": risk_pct, "daily_loss_limit_pct": 0.015, "spread_bps": spread_bps, "slippage_bps": slippage_bps,
                       "fee_bps": fee_bps, "stop_atr_multiplier": stop_atr_multiplier,
                       "reward_risk": reward_risk, "same_bar_stop_first": True,
                       "entry_timing": "next_candle_open"},
