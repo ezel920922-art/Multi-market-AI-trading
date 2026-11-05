@@ -16,6 +16,10 @@ class OpenXauusdPosition(Exception):
     """A concurrent or existing XAUUSD paper position blocks a new entry."""
 
 
+class DurableRiskRejected(Exception):
+    """The database-authoritative risk gate rejected a paper order."""
+
+
 class PostgresStore:
     def __init__(self, database_url: str):
         if not database_url:
@@ -146,26 +150,41 @@ class PostgresStore:
                 "realized_pnl": round(pnl, 2), "current_equity": round(current_equity, 2),
                 "risk_state": dict(state)}
 
-    def persist_order(self, request, result, risk_status: dict):
+    def persist_order(self, request, result, risk_status: dict, risk_config):
         signal = request.signal
         request_json = request.model_dump(mode="json")
         result_json = result.model_dump(mode="json")
         day = datetime.now(timezone.utc).date()
-        realized = float(risk_status["realized_pnl"])
-        halted = bool(risk_status["halted"])
         with self.connect() as conn:
             try:
                 with conn.transaction():
                     # Serialize durable risk writes across app instances using the singleton state row.
                     risk_state = conn.execute(
-                        "SELECT starting_equity, current_equity FROM public.risk_state WHERE id = 1 FOR UPDATE"
+                        """SELECT starting_equity, current_equity, daily_start_equity,
+                                  daily_realized_pnl, trading_day, trading_halted,
+                                  halt_reason, open_risk_pct
+                           FROM public.risk_state WHERE id = 1 FOR UPDATE"""
                     ).fetchone()
                     if not risk_state:
                         raise RuntimeError("Risk state is not initialized")
                     equity = float(risk_state["starting_equity"])
                     if equity <= 0:
                         raise RuntimeError("Stored starting equity is invalid")
-                    open_risk_pct = float(risk_status["open_risk"]) / equity
+                    # The database snapshot is authoritative; never overwrite it with a
+                    # potentially stale in-process risk snapshot from another worker.
+                    same_day = risk_state["trading_day"] == day
+                    realized = float(risk_state["daily_realized_pnl"]) if same_day else 0.0
+                    halted = bool(risk_state["trading_halted"]) if same_day else False
+                    daily_limit = equity * float(risk_config.daily_loss_limit_pct)
+                    if halted or realized <= -daily_limit:
+                        raise DurableRiskRejected("Trading halted: durable daily loss limit reached")
+                    requested_risk_pct = float(request.risk_amount) / equity
+                    if requested_risk_pct > float(risk_config.risk_per_trade_pct) + 1e-9:
+                        raise DurableRiskRejected("Risk per trade exceeds the durable configured limit")
+                    open_risk_pct = float(risk_state["open_risk_pct"]) if same_day else 0.0
+                    next_open_risk_pct = open_risk_pct + requested_risk_pct
+                    if next_open_risk_pct > float(risk_config.max_open_risk_pct) + 1e-9:
+                        raise DurableRiskRejected("Aggregate open risk limit exceeded in durable state")
                     # The row lock makes this check + insert atomic across concurrent instances.
                     if signal.symbol.strip().upper() == "XAUUSD":
                         existing = conn.execute(
@@ -203,7 +222,7 @@ class PostgresStore:
                                updated_at = now()
                          WHERE id = 1
                         """,
-                        (day, realized, day, halted, halted, open_risk_pct),
+                        (day, realized, day, halted, halted, next_open_risk_pct),
                     )
                     conn.execute(
                         """
@@ -214,7 +233,7 @@ class PostgresStore:
                                 %s, %s, %s, %s::jsonb)
                         """,
                         (
-                            max(0.0, equity + realized), realized, open_risk_pct,
+                            max(0.0, float(risk_state["current_equity"]) + realized), realized, next_open_risk_pct,
                             json.dumps({"symbol": signal.symbol, "market": signal.market.value,
                                         "side": signal.side.value, "order_id": result.order_id}),
                         ),

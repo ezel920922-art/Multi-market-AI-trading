@@ -13,7 +13,7 @@ from app.models import Signal, OrderRequest, MarketType, Side
 from app.engine import TradingEngine
 from dataclasses import replace
 from app.risk import RiskRejected
-from app.storage import DuplicateOrderKey, OpenXauusdPosition, PostgresStore
+from app.storage import DuplicateOrderKey, OpenXauusdPosition, DurableRiskRejected, PostgresStore
 
 app = FastAPI(title="Multi-Market Trading Agency", version="0.2.0",
               description="Paper-only API. No real broker execution is available.",
@@ -179,15 +179,34 @@ def submit_paper_order(payload: SubmitSignalRequest):
                                        risk_amount=payload.risk_amount,
                                        idempotency_key=payload.idempotency_key)
                 try:
-                    store.persist_order(request, result, engine.risk.status)
-                except (DuplicateOrderKey, OpenXauusdPosition) as exc:
+                    store.persist_order(request, result, engine.risk.status, engine.risk.config)
+                except (DuplicateOrderKey, OpenXauusdPosition, DurableRiskRejected) as exc:
                     # Undo the in-memory reservation if durable validation rejects this order.
                     engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
+                    # Reconcile this worker after a durable rejection.
+                    try:
+                        state = store.load_risk_state()
+                        if state:
+                            engine.risk.restore_persisted_state(
+                                realized_pnl=float(state["daily_realized_pnl"]),
+                                open_risk=float(state["open_risk_pct"]) * engine.risk.config.initial_equity,
+                                halted=bool(state["trading_halted"]), trading_day=state["trading_day"],
+                            )
+                    except Exception:
+                        pass
                     raise HTTPException(status_code=409, detail=str(exc)) from exc
                 except Exception as exc:
                     # Fail closed: never leave phantom exposure in memory after a failed write.
                     engine.risk.release_reservation(payload.risk_amount, payload.idempotency_key)
                     raise HTTPException(status_code=503, detail="Paper order was not durably recorded") from exc
+                # Reconcile local risk state with the committed database snapshot.
+                state = store.load_risk_state()
+                if state:
+                    engine.risk.restore_persisted_state(
+                        realized_pnl=float(state["daily_realized_pnl"]),
+                        open_risk=float(state["open_risk_pct"]) * engine.risk.config.initial_equity,
+                        halted=bool(state["trading_halted"]), trading_day=state["trading_day"],
+                    )
             return result.model_dump(mode="json")
         except RiskRejected as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
