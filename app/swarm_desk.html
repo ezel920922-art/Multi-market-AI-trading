@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#050914">
+<meta name="theme-color" content="#1A120E">
 <meta name="description" content="وكالة تداول متعددة الأسواق — لوحة ذكاء اصطناعي للتداول الورقي فقط.">
 <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -33,6 +33,48 @@ html{scroll-behavior:smooth;scroll-padding-top:12px}
 }
 @media(max-width:390px){.agent{padding:7px 3px}.agent b{font-size:9px}.agent small{font-size:7px}.orbit-title b{font-size:12px}}
 @media(display-mode:standalone){.wrap{padding-top:max(8px,env(safe-area-inset-top))}}
+
+/* Warm bronze / espresso theme */
+:root{
+ color-scheme:dark;
+ --bg:#1A120E;--panel:#3A2418;--panel2:#3A2418;--line:#6B4A2E;
+ --cyan:#A88462;--green:#22c55e;--mag:#A88462;--orange:#A88462;
+ --red:#e36b5d;--muted:#A88462;--white:#D5C4AE;
+ --gold:#A88462;--espresso:#1A120E;--bronze:#6B4A2E;
+}
+body{background:#1A120E;color:#D5C4AE}
+.brand,.agent,.health,.panel{background:#3A2418;border-color:#6B4A2E;box-shadow:0 4px 18px #00000022}
+.logo{background:#A88462;color:#1A120E;box-shadow:0 0 20px #A8846240}
+.brand p,.agent small,.health small,.muted,.meta,.metric-sub,.state{color:#A88462}
+.agent.cyan b,.agent.mag b,.agent.green b,.agent.orange b,.meta b,.tag,.orbit-title b{color:#A88462}
+.health strong,.foot b{color:#A88462}
+.tag{border-color:#6B4A2E;background:#1A120E}
+.market{border-bottom-color:#6B4A2E}
+.market b{color:#D5C4AE}
+.metric{color:#D5C4AE}
+.terminal{background:#1A120E;border-color:#6B4A2E;color:#D5C4AE}
+.logline .time{color:#A88462}.logline .info{color:#A88462}.logline .warn{color:#D5C4AE}
+.orbital{background:radial-gradient(circle,#6B4A2E 0,#3A2418 46%,#1A120E 78%);border-color:#6B4A2E}
+.orbital:before{border-color:#A8846260}.orbital:after{border-color:#A8846240}
+.core{background:radial-gradient(circle,#D5C4AE 0,#A88462 22%,#6B4A2E 58%,#1A120E 80%);box-shadow:0 0 25px #A88462,0 0 75px #A8846240;color:#1A120E}
+.orbit{background:#1A120E;border-color:#A88462;box-shadow:0 0 16px #A8846230;color:#A88462}
+.orbit small{color:#D5C4AE}
+.placeholder{border-color:#6B4A2E;color:#A88462;background:repeating-linear-gradient(135deg,#3A2418,#3A2418 10px,#2b1b13 10px,#2b1b13 20px)}
+.placeholder b,.notice{color:#A88462}
+.orderbook td{border-bottom-color:#6B4A2E}
+.btn{border-color:#6B4A2E;background:#1A120E;color:#D5C4AE}
+.btn.primary{background:#A88462;border-color:#A88462;color:#1A120E;font-weight:700}
+.btn:focus-visible,.mobile-nav a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #D5C4AE;outline-offset:2px}
+.btn:hover{border-color:#A88462}
+.btn.primary:hover{background:#D5C4AE;border-color:#D5C4AE;color:#1A120E}
+.field input,.controls input:not(.btn),textarea{background:#1A120E!important;border-color:#6B4A2E!important;color:#D5C4AE!important}
+.field input::placeholder,.controls input::placeholder,textarea::placeholder{color:#A88462}
+.foot{border-top-color:#6B4A2E;color:#A88462}
+.mobile-nav{background:#1A120Eee;border-top-color:#6B4A2E}
+.mobile-nav a{color:#A88462}
+.mobile-nav a:focus,.mobile-nav a:active{background:#3A2418;color:#D5C4AE}
+svg text{fill:#A88462}
+
 </style>
 </head>
 <body><main class="wrap">
