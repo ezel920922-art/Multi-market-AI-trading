@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from pathlib import Path
 from threading import RLock
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Query
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 from app.models import Signal, OrderRequest, MarketType, Side
@@ -42,6 +42,7 @@ async def security_headers(request: Request, call_next):
 
 from app.market_data import Candle
 from app.agents import AGENTS, analyze_market
+from app.market_provider import fetch_candles, provider_status, MarketProviderError
 
 class AgentAnalysisRequest(BaseModel):
     candles: list[Candle] = Field(min_length=1, max_length=500)
@@ -61,6 +62,17 @@ class SetupAnalysisRequest(BaseModel):
     take_profit: float = Field(gt=0, allow_inf_nan=False)
     equity: float = Field(default=10_000, gt=0, allow_inf_nan=False)
     risk_pct: float = Field(default=0.005, gt=0, le=0.005, allow_inf_nan=False)
+
+
+class KellySizingRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=40)
+    side: Side
+    entry: float = Field(gt=0, allow_inf_nan=False)
+    stop_loss: float = Field(gt=0, allow_inf_nan=False)
+    equity: float = Field(gt=0, allow_inf_nan=False)
+    win_rate: float = Field(ge=0, le=1, allow_inf_nan=False)
+    average_win_loss_ratio: float = Field(gt=0, le=20, allow_inf_nan=False)
+    kelly_fraction: float = Field(default=0.25, gt=0, le=0.5, allow_inf_nan=False)
 
 def persistence_required() -> bool:
     """Require durable order/risk state on hosted or explicitly production deployments."""
@@ -184,6 +196,40 @@ def analyze_setup(payload: SetupAnalysisRequest):
         "suggested_quantity": round(risk_budget / risk_per_unit, 8),
         "assumptions": ["Before fees, slippage, funding, and contract-size multipliers", "Not a trade recommendation"],
     }
+@app.post("/api/risk/kelly-size", dependencies=[Depends(require_api_key)])
+def kelly_position_size(payload: KellySizingRequest):
+    """Calculate fractional-Kelly paper sizing; never creates or submits an order."""
+    if payload.side == Side.buy and payload.stop_loss >= payload.entry:
+        raise HTTPException(status_code=422, detail="Buy stop-loss must be below entry")
+    if payload.side == Side.sell and payload.stop_loss <= payload.entry:
+        raise HTTPException(status_code=422, detail="Sell stop-loss must be above entry")
+    stop_distance = abs(payload.entry - payload.stop_loss)
+    stop_distance_pct = stop_distance / payload.entry
+    if not engine.risk.config.min_stop_distance_pct <= stop_distance_pct <= engine.risk.config.max_stop_distance_pct:
+        raise HTTPException(status_code=422, detail="Stop-loss distance is outside configured limits")
+    p = float(payload.win_rate)
+    b = float(payload.average_win_loss_ratio)
+    full_kelly = p - ((1.0 - p) / b)
+    proposed_fraction = max(0.0, full_kelly * float(payload.kelly_fraction))
+    risk_cap_pct = min(engine.risk.config.risk_per_trade_pct, 0.005)
+    applied_risk_pct = min(proposed_fraction, risk_cap_pct)
+    risk_budget = float(payload.equity) * applied_risk_pct
+    quantity = risk_budget / stop_distance if risk_budget > 0 else 0.0
+    return {
+        "mode": "analysis_only", "order_placed": False, "execution_enabled": False,
+        "symbol": payload.symbol.strip().upper(), "side": payload.side.value,
+        "full_kelly_fraction": round(full_kelly, 6),
+        "kelly_fraction_applied": float(payload.kelly_fraction),
+        "risk_pct": round(applied_risk_pct * 100, 4),
+        "risk_budget": round(risk_budget, 2),
+        "stop_distance": round(stop_distance, 8),
+        "suggested_quantity": round(quantity, 8),
+        "trade_allowed_by_kelly": applied_risk_pct > 0,
+        "risk_cap_pct": round(risk_cap_pct * 100, 4),
+        "disclaimer": "Fractional Kelly estimate from user-supplied historical win rate/payoff; not a validated forecast or trade recommendation."
+    }
+
+
 @app.get("/api/agents/status")
 def agent_status():
     """Static roster; agents remain idle until verified candles are supplied."""
@@ -199,6 +245,37 @@ def agents_analyze(payload: AgentAnalysisRequest):
         return analyze_market(payload.candles)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/api/market/status")
+def market_provider_status():
+    """Expose provider configuration without revealing credentials."""
+    return provider_status()
+
+
+@app.get("/api/market/candles", dependencies=[Depends(require_api_key)])
+def market_candles(
+    market: MarketType = Query(...),
+    symbol: str = Query(min_length=1, max_length=40),
+    interval: str = Query(default="1min", max_length=8),
+    outputsize: int = Query(default=100, ge=30, le=500),
+):
+    """Fetch read-only OHLCV from the configured provider; never submits orders."""
+    try:
+        candles = fetch_candles(market, symbol, interval, outputsize)
+        return {
+            "provider": "Twelve Data",
+            "mode": "read_only",
+            "market": market.value,
+            "symbol": symbol.strip().upper(),
+            "interval": interval,
+            "count": len(candles),
+            "candles": [c.model_dump(mode="json") for c in candles],
+        }
+    except MarketProviderError as exc:
+        message = str(exc)
+        status_code = 503 if "not configured" in message or "unavailable" in message else 422
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
 
 @app.get("/api/integrations")
