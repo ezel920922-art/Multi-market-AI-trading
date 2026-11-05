@@ -1,5 +1,10 @@
 name: Tests
 
+# The opt-in integration suite uses one isolated Neon branch; serialize runs to prevent cross-run contamination.
+concurrency:
+  group: trading-postgres-integration-${{ github.repository }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: ["main"]
