@@ -37,3 +37,13 @@ def test_six_agents_analyze_verified_candles_without_execution():
 def test_six_agent_analysis_requires_at_least_thirty_candles():
     with pytest.raises(ValueError, match="At least 30"):
         analyze_market(sample_candles(12))
+
+
+def test_historical_spectrogram_replays_windows_without_forward_prediction():
+    from app.agents import analyze_historical_spectrogram
+    result = analyze_historical_spectrogram(sample_candles())
+    assert result['mode'] == 'historical_replay'
+    assert result['predictive'] is False
+    assert result['windows'] >= 1
+    assert result['agents'] == ['PRIOR', 'EDGE', 'SPOTTER', 'TAKER', 'CLOSER', 'KELLY']
+    assert all(len(row['agents']) == 6 for row in result['rows'])
