@@ -388,3 +388,17 @@ def test_paper_order_fails_closed_when_persistence_is_required_but_missing(monke
     })
     assert response.status_code == 503
     assert "Durable database persistence is required" in response.json()["detail"]
+
+
+def test_ai_swarm_desk_preview_is_available_without_replacing_dashboard():
+    response = client.get('/desk')
+    assert response.status_code == 200
+    assert 'AI SWARM DESK' in response.text
+    assert 'PAPER ONLY' in response.text
+    assert 'NO LIVE FEED' in response.text
+
+
+def test_existing_dashboard_remains_available():
+    response = client.get('/')
+    assert response.status_code == 200
+    assert 'MULTI-MARKET' in response.text
