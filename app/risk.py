@@ -46,15 +46,27 @@ class RiskRejected(ValueError):
     pass
 
 class RiskManager:
-    """Central fail-closed risk gate. State is in-memory in this prototype."""
-    def __init__(self, config: RiskConfig | None = None):
+    """Central risk gate; optionally persists state in PostgreSQL."""
+    def __init__(self, config: RiskConfig | None = None, store=None):
         self.config = config or RiskConfig()
+        self.store = store
         self._lock = RLock()
         self._day = datetime.now(timezone.utc).date()
         self._realized_pnl = 0.0
         self._open_risk = 0.0
         self._seen_keys: set[str] = set()
         self._halted = False
+        if self.store is not None:
+            saved = self.store.load_risk_state()
+            self._day = saved["day"]
+            self._realized_pnl = saved["realized_pnl"]
+            self._open_risk = saved["open_risk"]
+            self._halted = saved["halted"]
+
+    def _persist(self) -> None:
+        if self.store is not None:
+            self.store.save_risk_state(day=self._day, realized_pnl=self._realized_pnl,
+                                       open_risk=self._open_risk, halted=self._halted)
 
     def restore_persisted_state(self, realized_pnl: float, open_risk: float, halted: bool, trading_day) -> None:
         """Restore durable risk state; daily loss counters reset at the UTC date boundary."""
@@ -78,6 +90,7 @@ class RiskManager:
             self._day = current_day
             self._realized_pnl = 0.0
             self._halted = False
+            self._persist()
 
     def record_realized_pnl(self, pnl: float):
         if not isfinite(float(pnl)):
@@ -87,6 +100,7 @@ class RiskManager:
             self._realized_pnl += float(pnl)
             if self._realized_pnl <= -(self.config.initial_equity * self.config.daily_loss_limit_pct):
                 self._halted = True
+            self._persist()
 
     def release_open_risk(self, amount: float):
         if not isfinite(float(amount)):
@@ -94,6 +108,7 @@ class RiskManager:
         with self._lock:
             self._roll_day()
             self._open_risk = max(0.0, self._open_risk - max(0.0, float(amount)))
+            self._persist()
 
     def release_reservation(self, amount: float, idempotency_key: str) -> None:
         """Undo a reservation when its order was not durably persisted."""
@@ -115,7 +130,8 @@ class RiskManager:
                 raise RiskRejected("Risk amount must be finite and positive")
             if not isfinite(risk_amount) or risk_amount <= 0:
                 raise RiskRejected("Risk amount must be finite and positive")
-            if not idempotency_key or idempotency_key in self._seen_keys:
+            if (not idempotency_key or idempotency_key in self._seen_keys
+                    or (self.store is not None and self.store.has_idempotency_key(idempotency_key))):
                 raise RiskRejected("Duplicate or empty idempotency key")
             if signal.confidence < self.config.min_confidence:
                 raise RiskRejected("Signal confidence below configured threshold")
@@ -147,6 +163,7 @@ class RiskManager:
                 raise RiskRejected("Risk exceeds remaining daily loss capacity")
             self._seen_keys.add(idempotency_key)
             self._open_risk += risk_amount
+            self._persist()
 
     @property
     def status(self) -> dict:
